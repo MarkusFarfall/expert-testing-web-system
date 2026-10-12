@@ -13,6 +13,7 @@ export function TestingSetup({ overview: initial }: { overview: Overview }) {
   useEffect(() => { if (!examId && examList?.length) setExamId(String((examList.find((x) => x.questionCount > 0) ?? examList[0]).id)); }, [examList, examId]);
   const { data: scoped } = useApi<Overview>(examId ? `overview?examId=${examId}` : "overview");
   const overview = (examId ? scoped : initial) ?? initial;
+  if (examList && !examList.length) return <><PageHeading title="Тестирование" description="Выберите тест, режим и приступайте к вопросам."/><div className="empty-state"><span className="aside-icon"><GraduationCap size={26}/></span><h2>Тесты пока не заведены</h2><p>Как только администратор создаст тест и загрузит в него вопросы, он появится здесь.</p><Link href="/questions" className="button">Посмотреть банк вопросов</Link></div></>;
   const [fullName, setFullName] = useState("");
   const [mode, setMode] = useState<Mode>(search.get("mode") === "selective" ? "selective" : "general");
   const [blockId, setBlockId] = useState(search.get("block") || "");
