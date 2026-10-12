@@ -39,6 +39,29 @@ async function readSheet(file: File, columns: string[], label: string, errors: s
   return result;
 }
 function positive(value: unknown) { const n = Number(value); return Number.isSafeInteger(n) && n > 0 && n <= 2147483647; }
+const TRUE_MARKERS = ["1", "true", "да", "yes", "верно", "истина"];
+const FALSE_MARKERS = ["", "0", "null", "n/a", "н/д", "нет", "no", "false", "ложь", "пусто", "-", "—", "–"];
+function parseMarker(value: unknown) {
+  const marker = String(value ?? "").trim().toLowerCase();
+  if (TRUE_MARKERS.includes(marker)) return { correct: 1 as const, custom: marker !== "1" };
+  if (FALSE_MARKERS.includes(marker)) return { correct: null, custom: marker !== "" && marker !== "0" };
+  return { error: marker };
+}
+export function stripNumbering(raw: string, number: number) {
+  const text = raw.trim();
+  const cut = (length: number) => {
+    const rest = text.slice(length);
+    if (!rest.trim() || /^\d/.test(rest.trim())) return null;
+    return rest.trimStart();
+  };
+  let m = text.match(/^(\d{1,6})\s*[.)]\s*/);
+  if (m && Number(m[1]) === number) { const rest = cut(m[0].length); if (rest) return { text: rest, stripped: true }; }
+  m = text.match(/^(\d{1,6})(?=[^\d\s.,)])/);
+  if (m && Number(m[1]) === number) { const rest = cut(m[1].length); if (rest) return { text: rest, stripped: true }; }
+  m = text.match(/^(\d{1,6})\s+/);
+  if (m && Number(m[1]) === number) { const rest = cut(m[0].length); if (rest) return { text: rest, stripped: true }; }
+  return { text, stripped: false };
+}
 export async function importBank(form: FormData) {
   const qFile = form.get("questions"), aFile = form.get("answers");
   if (!(qFile instanceof File) || !(aFile instanceof File)) throw new PortalError("Выберите оба файла: TableQuestions.xlsx и TableAnswers.xlsx.");
@@ -50,6 +73,7 @@ export async function importBank(form: FormData) {
   const qRows = await readSheet(qFile, qColumns, "Вопросы", errors, 10000);
   const aRows = await readSheet(aFile, aColumns, "Ответы", errors, 50000);
   const qIds = new Set<number>(), qOrder = new Set<string>(), aIds = new Set<number>(), aOrder = new Set<string>();
+  let normalized = 0;
   const qParsed = qRows.map((r) => {
     for (const c of ["Id", "blockid", "numberquestion"]) if (!positive(r[c])) errors.push(`Вопросы, строка ${r._row}: «${c}» должно быть положительным целым числом.`);
     const id = Number(r.Id), blockId = Number(r.blockid), number = Number(r.numberquestion);
@@ -58,11 +82,12 @@ export async function importBank(form: FormData) {
     const order = `${blockId}:${number}`;
     if (qOrder.has(order)) errors.push(`Блок ${blockId}: повторяется номер вопроса ${number}.`);
     qOrder.add(order);
-    const text = String(r.question ?? "").trim();
+    const prepared = stripNumbering(String(r.question ?? ""), number);
+    const text = prepared.text;
+    if (prepared.stripped) normalized++;
     if (!text || text.length > 10000) errors.push(`Вопрос Id=${id}: текст должен содержать от 1 до 10 000 символов.`);
     return { id, text, blockId, number };
   });
-  let normalized = 0;
   const aParsed = aRows.map((r) => {
     for (const c of ["Id", "question", "numberanswer"]) if (!positive(r[c])) errors.push(`Ответы, строка ${r._row}: «${c}» должно быть положительным целым числом.`);
     const id = Number(r.Id), questionId = Number(r.question), number = Number(r.numberanswer);
@@ -72,13 +97,14 @@ export async function importBank(form: FormData) {
     const order = `${questionId}:${number}`;
     if (aOrder.has(order)) errors.push(`Вопрос Id=${questionId}: повторяется номер ответа ${number}.`);
     aOrder.add(order);
-    const marker = String(r.true_answer ?? "").trim();
-    if (marker !== "" && marker !== "0" && marker !== "1") errors.push(`Ответ Id=${id}: true_answer должен быть 1, 0 или пустым.`);
-    const rawText = String(r.answer ?? "").trimStart();
-    const original = rawText.trim(), text = rawText.replace(/^\d+\.\s+/, "").trim();
-    if (original !== text) normalized++;
+    const marker = parseMarker(r.true_answer);
+    if (marker.error !== undefined) errors.push(`Ответ Id=${id}: true_answer должен быть 1, 0 или пустым, а в файле «${marker.error}».`);
+    else if (marker.custom) normalized++;
+    const prepared = stripNumbering(String(r.answer ?? ""), number);
+    const text = prepared.text;
+    if (prepared.stripped) normalized++;
     if (!text || text.length > 10000) errors.push(`Ответ Id=${id}: текст должен содержать от 1 до 10 000 символов.`);
-    return { id, text, questionId, number, correct: marker === "1" ? 1 : null };
+    return { id, text, questionId, number, correct: marker.error !== undefined ? null : marker.correct };
   });
   const grouped = new Map<number, typeof aParsed>();
   for (const a of aParsed) { if (!grouped.has(a.questionId)) grouped.set(a.questionId, []); grouped.get(a.questionId)!.push(a); }
