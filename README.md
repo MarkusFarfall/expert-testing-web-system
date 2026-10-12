@@ -60,6 +60,8 @@
 
 ## Деплой
 
-Vercel (проект `expert-testing-web-system`, корень репозитория) + Supabase PostgreSQL.
-После создания базы: `npx drizzle-kit push` для применения схемы; переменная `DATABASE_URL`
-задаётся в настройках проекта Vercel (Environment Variables).
+Vercel (проект `expert-testing-web-system`, корень репозитория) + Supabase PostgreSQL
+(проект `ktpp-expertiza`, eu-central-1). Схема применяется миграциями:
+`supabase db push` (SQL в `supabase/migrations/`). На Vercel задана `DATABASE_URL`
+(transaction pooler, порт 6543). Вход администратора: `/admin`, пароль задаётся
+переменной `ADMIN_PASSWORD` или при первом входе (хранится scrypt-хеш в `portal_settings`).

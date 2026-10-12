@@ -1,0 +1,1 @@
+INSERT INTO "portal_settings" ("key","value") VALUES ('admin_password','f9418eef0c2fa015cf75a9d8c8eaf108:c521ca5a98c08c7ee758bd7be76727fd8eecfda61bdb91eb2b0d85bf1e6aa75bb11bd7cf3598361ee15ea6625d57ed73ad2de5228039df9f23eee7841c9bad78') ON CONFLICT ("key") DO UPDATE SET "value"=EXCLUDED."value";
