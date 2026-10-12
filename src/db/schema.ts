@@ -1,13 +1,21 @@
-import { pgTable, integer, text, timestamp, uuid, jsonb, index, uniqueIndex, check } from "drizzle-orm/pg-core";
+import { pgTable, integer, serial, text, timestamp, uuid, jsonb, index, uniqueIndex, check } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { QuestionData } from "@/lib/types";
 
+export const exams = pgTable("exams", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [uniqueIndex("exams_name_unique").on(t.name)]);
+
 export const questions = pgTable("TableQuestions", {
+  examId: integer("exam_id").notNull().references(() => exams.id, { onDelete: "cascade" }),
   id: integer("Id").primaryKey(),
   text: text("question").notNull(),
   blockId: integer("blockid").notNull(),
   number: integer("numberquestion").notNull(),
-}, (t) => [uniqueIndex("question_block_number").on(t.blockId, t.number)]);
+}, (t) => [uniqueIndex("question_block_number").on(t.examId, t.blockId, t.number)]);
 
 export const answers = pgTable("TableAnswers", {
   id: integer("Id").primaryKey(),
@@ -34,6 +42,7 @@ export const attempts = pgTable("test_attempts", {
   total: integer("total").notNull(),
   correctCount: integer("correct_count").notNull().default(0),
   timeLimit: integer("time_limit").notNull().default(0),
+  examId: integer("exam_id").references(() => exams.id, { onDelete: "set null" }),
 }, (t) => [index("attempt_visitor").on(t.visitorId), index("attempt_date").on(t.startedAt)]);
 
 export const settings = pgTable("portal_settings", {

@@ -6,7 +6,8 @@ import { formatDate, type Overview } from "@/lib/types";
 
 export function Home({ overview }: { overview: Overview }) {
   const metrics = [
-    { value: overview.questionCount, label: "вопросов в единой базе", icon: Files },
+    { value: overview.exams.length, label: "тестов доступно", icon: GraduationCap },
+    { value: overview.questionCount, label: "вопросов в базе", icon: Files },
     { value: overview.blockCount, label: "тематических блоков", icon: Layers3 },
     { value: "2", label: "режима тестирования", icon: ListChecks },
     { value: "24/7", label: "доступ к платформе", icon: Clock3 },

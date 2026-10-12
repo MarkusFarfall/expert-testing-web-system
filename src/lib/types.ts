@@ -1,15 +1,16 @@
 export type Mode = "general" | "selective";
 export type AnswerData = { id: number; text: string; number: number; correct?: boolean };
-export type QuestionData = { id: number; text: string; blockId: number; number: number; answers: AnswerData[] };
+export type ExamData = { id: number; name: string; description: string; questionCount: number; blockCount: number };
+export type QuestionData = { id: number; examId: number; text: string; blockId: number; number: number; answers: AnswerData[] };
 export type BlockData = { id: number; title: string; description: string; count: number };
-export type Overview = { questionCount: number; blockCount: number; completedCount: number; blocks: BlockData[]; updatedAt: string; isDemo: boolean };
+export type Overview = { questionCount: number; blockCount: number; completedCount: number; blocks: BlockData[]; updatedAt: string; isDemo: boolean; exams: ExamData[] };
 export type AttemptData = {
   id: string; fullName: string; mode: Mode; status: "active" | "completed";
   startedAt: string; finishedAt: string | null; questions: QuestionData[];
   responses: Record<string, number>; total: number; correctCount: number;
-  percentage: number; timeLimit: number;
+  percentage: number; timeLimit: number; examId: number | null; examName: string | null;
 };
-export type ResultRow = { id: string; fullName: string; mode: Mode; startedAt: string; finishedAt: string | null; total: number; correctCount: number; percentage: number };
+export type ResultRow = { id: string; fullName: string; mode: Mode; startedAt: string; finishedAt: string | null; total: number; correctCount: number; percentage: number; examName: string | null };
 export type AdminStatus = { authenticated: boolean; setupRequired: boolean };
 export const modeLabels: Record<Mode, string> = { general: "Общий", selective: "Выборочный" };
 export const blockCatalog = [

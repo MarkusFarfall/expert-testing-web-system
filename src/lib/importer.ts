@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { db } from "@/db";
-import { answers, questions, settings } from "@/db/schema";
-import { sql } from "drizzle-orm";
+import { answers, exams, questions, settings } from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { PortalError } from "@/lib/store";
 
 type Row = Record<string, unknown>;
@@ -42,7 +42,10 @@ function positive(value: unknown) { const n = Number(value); return Number.isSaf
 export async function importBank(form: FormData) {
   const qFile = form.get("questions"), aFile = form.get("answers");
   if (!(qFile instanceof File) || !(aFile instanceof File)) throw new PortalError("Выберите оба файла: TableQuestions.xlsx и TableAnswers.xlsx.");
-  if (form.get("confirm") !== "true") throw new PortalError("Подтвердите замену текущего банка вопросов.");
+  if (form.get("confirm") !== "true") throw new PortalError("Подтвердите замену банка выбранного теста.");
+  const examId = Number(form.get("examId"));
+  if (!Number.isSafeInteger(examId) || examId < 1) throw new PortalError("Выберите тест, в который выполняется импорт.");
+  if (!(await db.select({ id: exams.id }).from(exams).where(eq(exams.id, examId))).length) throw new PortalError("Выбранный тест не найден.", 404);
   const errors: string[] = [];
   const qRows = await readSheet(qFile, qColumns, "Вопросы", errors, 10000);
   const aRows = await readSheet(aFile, aColumns, "Ответы", errors, 50000);
@@ -70,7 +73,7 @@ export async function importBank(form: FormData) {
     if (aOrder.has(order)) errors.push(`Вопрос Id=${questionId}: повторяется номер ответа ${number}.`);
     aOrder.add(order);
     const marker = String(r.true_answer ?? "").trim();
-    if (marker !== "" && marker !== "1") errors.push(`Ответ Id=${id}: true_answer должен быть 1 или пустым.`);
+    if (marker !== "" && marker !== "0" && marker !== "1") errors.push(`Ответ Id=${id}: true_answer должен быть 1, 0 или пустым.`);
     const rawText = String(r.answer ?? "").trimStart();
     const original = rawText.trim(), text = rawText.replace(/^\d+\.\s+/, "").trim();
     if (original !== text) normalized++;
@@ -88,9 +91,16 @@ export async function importBank(form: FormData) {
   if (errors.length) throw new PortalError(`Импорт отменён: найдено проблем — ${errors.length}. База не изменена.`, 422, errors.slice(0, 150));
   await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(82341)`);
-    await tx.delete(questions);
-    for (let i = 0; i < qParsed.length; i += 1000) await tx.insert(questions).values(qParsed.slice(i, i + 1000));
-    for (let i = 0; i < aParsed.length; i += 1000) await tx.insert(answers).values(aParsed.slice(i, i + 1000));
+    await tx.delete(questions).where(eq(questions.examId, examId));
+    const [lastQ] = await tx.select({ id: sql<number>`coalesce(max(${questions.id}), 0)` }).from(questions);
+    const [lastA] = await tx.select({ id: sql<number>`coalesce(max(${answers.id}), 0)` }).from(answers);
+    let qSeq = Number(lastQ.id);
+    const idMap = new Map<number, number>();
+    const qInsert = qParsed.map((q) => { idMap.set(q.id, ++qSeq); return { id: qSeq, examId, text: q.text, blockId: q.blockId, number: q.number }; });
+    let aSeq = Number(lastA.id);
+    const aInsert = aParsed.map((a) => ({ id: ++aSeq, questionId: idMap.get(a.questionId)!, text: a.text, number: a.number, correct: a.correct }));
+    for (let i = 0; i < qInsert.length; i += 1000) await tx.insert(questions).values(qInsert.slice(i, i + 1000));
+    for (let i = 0; i < aInsert.length; i += 1000) await tx.insert(answers).values(aInsert.slice(i, i + 1000));
     for (const entry of [{ key: "demo_bank", value: "0" }, { key: "bank_updated", value: new Date().toISOString() }]) await tx.insert(settings).values(entry).onConflictDoUpdate({ target: settings.key, set: { value: entry.value } });
   });
   return { questions: qParsed.length, answers: aParsed.length, normalized, message: `Банк обновлён: ${qParsed.length} вопросов, ${aParsed.length} ответов. Нормализовано: ${normalized}.` };

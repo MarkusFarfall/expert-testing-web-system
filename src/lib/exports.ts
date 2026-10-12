@@ -42,32 +42,32 @@ export async function makePdf(title: string, subtitle: string, paragraphs: strin
   return pdf.save();
 }
 export async function exportStatistics(rows: ResultRow[], format: string, filters: URLSearchParams) {
-  const filterText = `ФИО: ${filters.get("name") || "все"} · Период: ${filters.get("from") || "не ограничен"} — ${filters.get("to") || "не ограничен"}`;
+  const filterText = `ФИО: ${filters.get("name") || "все"} · Тест: ${filters.get("exam") ? `#${filters.get("exam")}` : "все"} · Период: ${filters.get("from") || "не ограничен"} — ${filters.get("to") || "не ограничен"}`;
   if (format === "pdf") return makePdf("Статистика тестирования", filterText, [
     `ИТОГО: ${rows.length} завершённых тестов. Сформировано: ${formatDate(new Date().toISOString(), true)}.`,
-    ...rows.flatMap((r, i) => [`${i + 1}. ${r.fullName}`, `${formatDate(r.finishedAt || r.startedAt, true)} · ${modeLabels[r.mode]} режим · Верно: ${r.correctCount} · Неверно: ${r.total - r.correctCount} · Результат: ${r.percentage}%`]),
+    ...rows.flatMap((r, i) => [`${i + 1}. ${r.fullName}`, `${r.examName ?? "Тест"} · ${formatDate(r.finishedAt || r.startedAt, true)} · ${modeLabels[r.mode]} режим · Верно: ${r.correctCount} · Неверно: ${r.total - r.correctCount} · Результат: ${r.percentage}%`]),
   ]);
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "КТПП";
   const sheet = workbook.addWorksheet("Результаты");
   sheet.columns = [
-    { header: "ФИО", key: "fullName", width: 42 }, { header: "Дата и время (Калининград)", key: "date", width: 27 },
+    { header: "ФИО", key: "fullName", width: 42 }, { header: "Тест", key: "exam", width: 34 }, { header: "Дата и время (Калининград)", key: "date", width: 27 },
     { header: "Режим", key: "mode", width: 18 }, { header: "Вопросов", key: "total", width: 13 },
     { header: "Правильно", key: "correct", width: 14 }, { header: "Неправильно", key: "incorrect", width: 15 }, { header: "Процент", key: "percentage", width: 13 },
   ];
-  for (const r of rows) sheet.addRow({ fullName: r.fullName, date: new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Kaliningrad" }).format(new Date(r.finishedAt || r.startedAt)), mode: modeLabels[r.mode], total: r.total, correct: r.correctCount, incorrect: r.total - r.correctCount, percentage: r.percentage / 100 });
+  for (const r of rows) sheet.addRow({ fullName: r.fullName, exam: r.examName ?? "—", date: new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Kaliningrad" }).format(new Date(r.finishedAt || r.startedAt)), mode: modeLabels[r.mode], total: r.total, correct: r.correctCount, incorrect: r.total - r.correctCount, percentage: r.percentage / 100 });
   sheet.getColumn("percentage").numFmt = "0%";
   sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   sheet.getRow(1).height = 28;
   sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF204C99" } };
-  sheet.autoFilter = { from: "A1", to: `G${Math.max(1, rows.length + 1)}` };
+  sheet.autoFilter = { from: "A1", to: `H${Math.max(1, rows.length + 1)}` };
   sheet.views = [{ state: "frozen", ySplit: 1 }];
   const info = workbook.addWorksheet("Параметры"); info.addRows([["Статистика тестирования КТПП"], [filterText], ["Сформировано", new Date().toISOString()]]); info.getColumn(1).width = 100;
   return workbook.xlsx.writeBuffer();
 }
 export async function exportAttempt(attempt: AttemptData) {
   const mistakes = attempt.questions.filter((q) => !q.answers.some((a) => a.correct && a.id === attempt.responses[q.id]));
-  return makePdf("Результат тестирования", `${attempt.fullName} · ${modeLabels[attempt.mode]} режим · ${formatDate(attempt.finishedAt || attempt.startedAt, true)}`, [
+  return makePdf("Результат тестирования", `${attempt.fullName} · ${attempt.examName ?? "Тест"} · ${modeLabels[attempt.mode]} режим · ${formatDate(attempt.finishedAt || attempt.startedAt, true)}`, [
     `Результат: ${attempt.percentage}% · Правильно: ${attempt.correctCount} из ${attempt.total}.`,
     "Работа над ошибками",
     ...(mistakes.length ? mistakes.flatMap((q, i) => [`${i + 1}. ${q.text} (${getBlockTitle(q.blockId)})`, `Ваш ответ: ${q.answers.find((a) => a.id === attempt.responses[q.id])?.text ?? "Ответ не выбран"}`, `Правильный ответ: ${q.answers.find((a) => a.correct)?.text ?? "—"}`]) : ["Все ответы верны. Ошибок нет."]),

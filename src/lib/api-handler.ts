@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { accessAttempt, createAttempt, deleteQuestion, ensureSeed, getOverview, getQuestionBank, listResults, PortalError, saveQuestion } from "@/lib/store";
+import { accessAttempt, createAttempt, createExam, deleteExam, deleteQuestion, ensureSeed, getOverview, getQuestionBank, listExams, listResults, PortalError, saveQuestion, updateExam } from "@/lib/store";
 import { adminCookie, adminStatus, isAdmin, login, logout, requireAdmin, visitorCookie } from "@/lib/auth";
 import { importBank, importTemplate } from "@/lib/importer";
 import { exportAttempt, exportStatistics, makePdf } from "@/lib/exports";
@@ -23,8 +23,11 @@ export async function handle(request: NextRequest, context: Context) {
     const key = path.join("/"), method = request.method, params = request.nextUrl.searchParams;
     const visitor = request.cookies.get(visitorCookie)?.value;
     const cookieOptions = { httpOnly: true, sameSite: "lax" as const, secure: request.nextUrl.protocol === "https:" || request.headers.get("x-forwarded-proto") === "https", path: "/" };
-    if (method === "GET" && key === "overview") return json(await getOverview());
-    if (method === "GET" && key === "questions") return json(await getQuestionBank());
+    const examParam = params.get("examId");
+    const examId = examParam && /^\d+$/.test(examParam) ? Number(examParam) : undefined;
+    if (method === "GET" && key === "exams") return json(await listExams());
+    if (method === "GET" && key === "overview") return json(await getOverview(examId));
+    if (method === "GET" && key === "questions") return json(await getQuestionBank(false, examId));
     if (method === "GET" && key === "results") return json(visitor ? await listResults(params, visitor) : []);
     if (method === "POST" && key === "tests") {
       const visitorId = visitor && /^[\da-f-]{36}$/i.test(visitor) ? visitor : randomUUID();
@@ -61,7 +64,11 @@ export async function handle(request: NextRequest, context: Context) {
     }
     if (path[0] === "admin") {
       await requireAdmin(request);
-      if (key === "admin/questions" && method === "GET") return json(await getQuestionBank(true));
+      if (key === "admin/exams" && method === "GET") return json(await listExams());
+      if (key === "admin/exams" && method === "POST") return json(await createExam(await request.json()), 201);
+      if (path[1] === "exams" && path[2] && method === "PATCH") return json(await updateExam(Number(path[2]), await request.json()));
+      if (path[1] === "exams" && path[2] && method === "DELETE") return json(await deleteExam(Number(path[2])));
+      if (key === "admin/questions" && method === "GET") return json(await getQuestionBank(true, examId));
       if (key === "admin/questions" && method === "POST") return json(await saveQuestion(await request.json()), 201);
       if (path[1] === "questions" && path[2] && method === "PATCH") return json(await saveQuestion(await request.json(), Number(path[2])));
       if (path[1] === "questions" && path[2] && method === "DELETE") return json(await deleteQuestion(Number(path[2])));
