@@ -56,7 +56,7 @@ export function stripNumbering(raw: string, number: number) {
   };
   let m = text.match(/^(\d{1,6})\s*[.)]\s*/);
   if (m && Number(m[1]) === number) { const rest = cut(m[0].length); if (rest) return { text: rest, stripped: true }; }
-  m = text.match(/^(\d{1,6})(?=[^\d\s.,)])/);
+  m = text.match(/^(\d{1,6})(?=[^\d\s.,)\-–%])/);
   if (m && Number(m[1]) === number) { const rest = cut(m[1].length); if (rest) return { text: rest, stripped: true }; }
   m = text.match(/^(\d{1,6})\s+/);
   if (m && Number(m[1]) === number) { const rest = cut(m[0].length); if (rest) return { text: rest, stripped: true }; }
