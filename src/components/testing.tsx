@@ -13,7 +13,6 @@ export function TestingSetup({ overview: initial }: { overview: Overview }) {
   useEffect(() => { if (!examId && examList?.length) setExamId(String((examList.find((x) => x.questionCount > 0) ?? examList[0]).id)); }, [examList, examId]);
   const { data: scoped } = useApi<Overview>(examId ? `overview?examId=${examId}` : "overview");
   const overview = (examId ? scoped : initial) ?? initial;
-  if (examList && !examList.length) return <><PageHeading title="Тестирование" description="Выберите тест, режим и приступайте к вопросам."/><div className="empty-state"><span className="aside-icon"><GraduationCap size={26}/></span><h2>Тесты пока не заведены</h2><p>Как только администратор создаст тест и загрузит в него вопросы, он появится здесь.</p><Link href="/questions" className="button">Посмотреть банк вопросов</Link></div></>;
   const [fullName, setFullName] = useState("");
   const [mode, setMode] = useState<Mode>(search.get("mode") === "selective" ? "selective" : "general");
   const [blockId, setBlockId] = useState(search.get("block") || "");
@@ -29,6 +28,7 @@ export function TestingSetup({ overview: initial }: { overview: Overview }) {
       router.push(`/test/${result.id}`);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
+  if (examList && !examList.length) return <><PageHeading title="Тестирование" description="Выберите тест, режим и приступайте к вопросам."/><div className="empty-state"><span className="aside-icon"><GraduationCap size={26}/></span><h2>Тесты пока не заведены</h2><p>Как только администратор создаст тест и загрузит в него вопросы, он появится здесь.</p><Link href="/questions" className="button">Посмотреть банк вопросов</Link></div></>;
   return <><PageHeading eyebrow="ВАШ СЛЕДУЮЩИЙ ШАГ" title="Начать тестирование" description="Представьтесь и выберите удобный формат. Регистрация и пароль не нужны."/><div className="setup-layout"><form className="form-panel" onSubmit={submit}>
     <h2 className="section-label"><span>1</span>Какой тест проходите?</h2><div className="field"><label htmlFor="exam-select">Тест (банк вопросов)</label><select id="exam-select" value={examId} onChange={(e) => { setExamId(e.target.value); setBlockId(""); setFrom(""); setTo(""); }} required>{(examList ?? []).map((x) => <option key={x.id} value={x.id}>{x.name}{x.questionCount ? ` · ${x.questionCount} вопр.` : " · банк пуст"}</option>)}</select><small>{examList?.find((x) => String(x.id) === examId)?.description || "Выберите тест — от него зависят доступные блоки и число вопросов."}</small></div>
     <div className="form-divider"/><h2 className="section-label"><span>2</span>Как к вам обращаться?</h2><div className="field"><label htmlFor="full-name">Фамилия, имя и отчество <span style={{ color: "#9baac0", fontWeight: 400 }}>(при наличии)</span></label><div className="input-with-icon"><UserRound size={17}/><input id="full-name" name="name" autoComplete="name" placeholder="Иванов Иван Иванович" value={fullName} onChange={(e) => setFullName(e.target.value)} minLength={5} maxLength={180} required autoFocus/></div><small>ФИО будет указано в вашем результате тестирования.</small></div>
