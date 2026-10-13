@@ -3,11 +3,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-API_BASE="${API_BASE:-https://212-193-5-193.sslip.io/portal}"
+API_BASE="${API_BASE:-https://212.193.5.193/portal}"
+API_FALLBACKS="${API_FALLBACKS:-https://212-193-5-193.sslip.io/portal}"
 BASE_PATH="${BASE_PATH:-/expert-testing-web-system}"
 
 echo "▶ Сборка статики (API: $API_BASE)"
-NEXT_PUBLIC_API_BASE="$API_BASE" NEXT_PUBLIC_BASE_PATH="$BASE_PATH" npm run build
+NEXT_PUBLIC_API_BASE="$API_BASE" NEXT_PUBLIC_API_FALLBACKS="$API_FALLBACKS" NEXT_PUBLIC_BASE_PATH="$BASE_PATH" npm run build
 
 touch out/.nojekyll
 echo "▶ Публикация ветки gh-pages"

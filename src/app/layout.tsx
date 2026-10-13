@@ -10,5 +10,6 @@ export const metadata: Metadata = {
 };
 export default function RootLayout({ children }: { children: ReactNode }) {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-  return <html lang="ru"><head><style dangerouslySetInnerHTML={{ __html: `@font-face{font-family:Golos;src:url('${basePath}/fonts/Golos.ttf') format('truetype');font-style:normal;font-weight:100 900;font-display:swap}` }}/></head><body><Shell>{children}</Shell></body></html>;
+  const apiOrigin = new URL(process.env.NEXT_PUBLIC_API_BASE ?? "https://212.193.5.193/portal").origin;
+  return <html lang="ru"><head><link rel="preconnect" href={apiOrigin} crossOrigin="anonymous"/><link rel="dns-prefetch" href={apiOrigin}/><style dangerouslySetInnerHTML={{ __html: `@font-face{font-family:Golos;src:url('${basePath}/fonts/Golos.ttf') format('truetype');font-style:normal;font-weight:100 900;font-display:swap}` }}/></head><body><Shell>{children}</Shell></body></html>;
 }

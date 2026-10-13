@@ -1,5 +1,13 @@
 "use client";
-export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? "https://212-193-5-193.sslip.io/portal").replace(/\/$/, "");
+// Адреса API. Основной — прямо по IP: не зависит от DNS (в России имена вида sslip.io
+// могут не резолвиться). Запасной — то же самое по имени, на случай блокировки IP.
+const PRIMARY = (process.env.NEXT_PUBLIC_API_BASE ?? "https://212.193.5.193/portal").replace(/\/$/, "");
+const ALTERNATES = (process.env.NEXT_PUBLIC_API_FALLBACKS ?? "https://212-193-5-193.sslip.io/portal")
+  .split(",").map((h) => h.trim().replace(/\/$/, "")).filter((h) => h && h !== PRIMARY);
+export const API_BASE = PRIMARY;
+export const API_FALLBACKS = ALTERNATES;
+export const API_ORIGIN = new URL(PRIMARY).origin;
+
 export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const ADMIN_KEY = "ktpp_admin_token", VISITOR_KEY = "ktpp_visitor_id";
 

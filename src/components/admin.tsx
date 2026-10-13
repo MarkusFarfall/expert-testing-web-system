@@ -151,7 +151,7 @@ function ImportManager({ onUpdated, onOpenTests }: { onUpdated: () => void; onOp
     setBusy(true);
     try {
       const parsed = await parseBankFiles(questions, answers);
-      const result = await api<{ message: string }>("admin/import", { method: "POST", body: JSON.stringify({ examId: Number(examId), questions: parsed.questions, answers: parsed.answers, normalized: parsed.normalized }) });
+      const result = await api<{ message: string }>("admin/import", { method: "POST", timeoutMs: 90000, body: JSON.stringify({ examId: Number(examId), questions: parsed.questions, answers: parsed.answers, normalized: parsed.normalized }) });
       setSuccess(result.message); setConfirm(false); onUpdated();
     }
     catch (e) { setError((e as Error).message); if (e instanceof ApiError) setDetails(e.details ?? []); else if ((e as { details?: string[] }).details) setDetails((e as { details: string[] }).details); }
