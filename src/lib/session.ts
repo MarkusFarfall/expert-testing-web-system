@@ -1,5 +1,5 @@
 "use client";
-export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? "https://ijbixganpfkrmqyaykjf.supabase.co/functions/v1/portal").replace(/\/$/, "");
+export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? "https://212-193-5-193.sslip.io/portal").replace(/\/$/, "");
 export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const ADMIN_KEY = "ktpp_admin_token", VISITOR_KEY = "ktpp_visitor_id";
 
