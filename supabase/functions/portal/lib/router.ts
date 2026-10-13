@@ -1,10 +1,10 @@
-import { accessAttempt, bulkQuestions, createAttempt, createExam, deleteBackup, deleteExam, deleteQuestion, ensureSeed, getOverview, getQuestionBank, listBackups, listExamBlocks, listExams, listResults, PortalError, restoreBackup, saveExamBlocks, saveQuestion, updateExam } from "./store.ts";
+import { accessAttempt, bulkQuestions, createAttempt, createExam, deleteBackup, deleteExam, deleteQuestion, ensureSeed, getOverview, getQuestionBank, listBackups, listExams, listResults, PortalError, restoreBackup, saveQuestion, updateExam } from "./store.ts";
 import { adminHeader, adminStatus, isAdmin, login, logout, requireAdmin } from "./auth.ts";
 import { importBankJson } from "./import.ts";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "content-type, authorization, apikey, x-admin-token, x-visitor-id",
   "Access-Control-Max-Age": "86400",
 };
@@ -63,8 +63,6 @@ export async function handleRequest(request: Request): Promise<Response> {
       if (path[1] === "questions" && path[2] && method === "PATCH") return json(await saveQuestion(await request.json(), Number(path[2])));
       if (path[1] === "questions" && path[2] && method === "DELETE") return json(await deleteQuestion(Number(path[2])));
       if (key === "admin/questions/bulk" && method === "POST") return json(await bulkQuestions(await request.json()));
-      if (key === "admin/blocks" && method === "GET") { if (examId === undefined) throw new PortalError("Выберите тест."); return json(await listExamBlocks(examId)); }
-      if (key === "admin/blocks" && method === "PUT") return json(await saveExamBlocks(await request.json()));
       if (key === "admin/import" && method === "POST") return json(await importBankJson(await request.json()));
       if (key === "admin/stats" && method === "GET") return json(await listResults(params));
     }

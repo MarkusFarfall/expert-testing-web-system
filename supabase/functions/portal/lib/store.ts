@@ -1,8 +1,8 @@
 import { db } from "./db.ts";
-import { answers, attempts, bankBackups, examBlocks, exams, questions, settings } from "./schema.ts";
+import { answers, attempts, bankBackups, exams, questions, settings } from "./schema.ts";
 import { and, asc, count, desc, eq, gt, gte, ilike, inArray, lt, sql } from "./drizzle.ts";
 import { seedBank } from "./seed.ts";
-import type { AttemptData, BlockData, ExamData, Overview, QuestionData, ResultRow } from "./types.ts";
+import type { AttemptData, ExamData, Overview, QuestionData, ResultRow } from "./types.ts";
 
 export class PortalError extends Error {
   constructor(message: string, public status = 400, public details?: string[]) { super(message); }
@@ -83,13 +83,9 @@ export async function backupBank(examId: number, reason: string) {
     byQuestion.set(row.TableAnswers.questionId, list);
   }
   const data: BankRow[] = qs.map((q) => ({ blockId: q.blockId, number: q.number, text: q.text, answers: byQuestion.get(q.id) ?? [] }));
-  // Названия тем тоже попадают в копию — при восстановлении тест сохранит свои темы.
-  const titleRows = await db.select({ blockId: examBlocks.blockId, title: examBlocks.title, description: examBlocks.description })
-    .from(examBlocks).where(eq(examBlocks.examId, examId)).orderBy(asc(examBlocks.blockId));
   const [row] = await db.insert(bankBackups).values({
     examName: exam.name, description: exam.description, reason,
     questionCount: qs.length, answerCount: ans.length, data,
-    blocks: titleRows.length ? titleRows : null,
   }).returning({ id: bankBackups.id });
   await db.execute(sql`delete from bank_backups where id not in (select id from bank_backups order by created_at desc limit 20)`);
   return row.id;
@@ -125,10 +121,6 @@ export async function restoreBackup(id: number): Promise<ExamData> {
     }
     for (let i = 0; i < qRows.length; i += 1000) await tx.insert(questions).values(qRows.slice(i, i + 1000));
     for (let i = 0; i < aRows.length; i += 1000) await tx.insert(answers).values(aRows.slice(i, i + 1000));
-    if (backup.blocks?.length) {
-      const titles = backup.blocks.filter((b) => (b.title ?? "").trim() || (b.description ?? "").trim());
-      if (titles.length) await tx.insert(examBlocks).values(titles.map((b) => ({ examId: exam.id, blockId: b.blockId, title: b.title ?? "", description: b.description ?? "" }))).onConflictDoNothing();
-    }
     const blockCount = new Set(qRows.map((q) => q.blockId)).size;
     return { id: exam.id, name: exam.name, description: exam.description, questionCount: qRows.length, blockCount };
   });
@@ -176,17 +168,9 @@ export async function getOverview(examId?: number): Promise<Overview> {
   const examList: ExamData[] = row.exams.map((e) => ({ ...e, questionCount: Number(e.questionCount), blockCount: Number(e.blockCount) }));
   if (examId !== undefined && !examList.some((e) => e.id === examId)) throw new PortalError("Тест не найден.", 404);
   const rows = row.blocks.map((b) => ({ id: Number(b.id), count: Number(b.count) }));
-  // Названия тем хранятся в базе (таблица exam_blocks) — свои у каждого теста.
-  // Обзор без выбранного теста берёт первый непустой вариант по номеру блока (картина на главной).
-  const titleRows = await db.select({ blockId: examBlocks.blockId, title: examBlocks.title, description: examBlocks.description })
-    .from(examBlocks)
-    .where(scope === null ? sql`${examBlocks.title} <> ''` : eq(examBlocks.examId, scope))
-    .orderBy(asc(examBlocks.examId));
-  const titles = new Map<number, { title: string; description: string }>();
-  for (const t of titleRows) if (!titles.has(t.blockId)) titles.set(t.blockId, { title: t.title, description: t.description });
   return {
     questionCount: rows.reduce((n, r) => n + r.count, 0), blockCount: rows.length, completedCount: Number(row.completed),
-    blocks: rows.map((b) => ({ ...b, title: titles.get(b.id)?.title?.trim() || `Тематический блок № ${b.id}`, description: titles.get(b.id)?.description?.trim() || "Вопросы из импортированного банка" })),
+    blocks: rows,
     updatedAt: row.updated ?? new Date().toISOString(),
     isDemo: row.demo === "1",
     exams: examList,
@@ -201,12 +185,7 @@ export async function getQuestionBank(withCorrect = false, examId?: number): Pro
     if (!grouped.has(a.questionId)) grouped.set(a.questionId, []);
     grouped.get(a.questionId)!.push({ id: a.id, text: a.text, number: a.number, ...(withCorrect ? { correct: a.correct === 1 } : {}) });
   }
-  // Название темы (per-тест) прикладываем к вопросу: так оно попадает и в банк вопросов,
-  // и в снимок попытки — разбор результата и PDF показывают правильные названия.
-  const titleRows = await db.select({ examId: examBlocks.examId, blockId: examBlocks.blockId, title: examBlocks.title })
-    .from(examBlocks).where(sql`${examBlocks.title} <> ''`);
-  const titles = new Map(titleRows.map((t) => [`${t.examId}:${t.blockId}`, t.title]));
-  return qs.map((q) => ({ ...q, blockTitle: titles.get(`${q.examId}:${q.blockId}`) ?? "", answers: grouped.get(q.id) ?? [] }));
+  return qs.map((q) => ({ ...q, answers: grouped.get(q.id) ?? [] }));
 }
 export function validateName(input: unknown) {
   const name = typeof input === "string" ? input.trim().replace(/\s+/g, " ") : "";
@@ -299,40 +278,6 @@ export async function listResults(params: URLSearchParams, visitorId?: string): 
   if (params.get("from") && params.get("to") && params.get("from")! > params.get("to")!) throw new PortalError("Начало периода позже его окончания.");
   const rows = await db.select({ id: attempts.id, fullName: attempts.fullName, mode: attempts.mode, startedAt: attempts.startedAt, finishedAt: attempts.finishedAt, total: attempts.total, correctCount: attempts.correctCount, examName: exams.name }).from(attempts).leftJoin(exams, eq(attempts.examId, exams.id)).where(and(...conditions)).orderBy(desc(attempts.finishedAt));
   return rows.map((r) => ({ ...r, startedAt: r.startedAt.toISOString(), finishedAt: r.finishedAt?.toISOString() ?? null, percentage: Math.round(r.correctCount / r.total * 100), examName: r.examName ?? null }));
-}
-export async function listExamBlocks(examId: number): Promise<BlockData[]> {
-  if (!Number.isSafeInteger(examId) || examId < 1) throw new PortalError("Выберите тест.");
-  const [exam] = await db.select({ id: exams.id }).from(exams).where(eq(exams.id, examId));
-  if (!exam) throw new PortalError("Тест не найден.", 404);
-  const counts = await db.select({ blockId: questions.blockId, value: count().mapWith(Number) })
-    .from(questions).where(eq(questions.examId, examId)).groupBy(questions.blockId).orderBy(asc(questions.blockId));
-  const titles = await db.select().from(examBlocks).where(eq(examBlocks.examId, examId));
-  const byId = new Map(titles.map((t) => [t.blockId, t]));
-  return counts.map((c) => ({ id: Number(c.blockId), count: Number(c.value), title: byId.get(c.blockId)?.title ?? "", description: byId.get(c.blockId)?.description ?? "" }));
-}
-export async function saveExamBlocks(input: Record<string, unknown>): Promise<BlockData[]> {
-  const examId = integer(input?.examId, "Тест", 1, 2147483647);
-  const list = Array.isArray(input?.blocks) ? input.blocks as Record<string, unknown>[] : [];
-  if (!list.length) throw new PortalError("Нет блоков для сохранения.");
-  if (list.length > 200) throw new PortalError("Слишком много блоков за один раз.");
-  const [exam] = await db.select({ id: exams.id }).from(exams).where(eq(exams.id, examId));
-  if (!exam) throw new PortalError("Тест не найден.", 404);
-  const prepared = list.map((row) => {
-    const blockId = integer(row?.id, "Номер блока", 1, 2147483647);
-    const title = typeof row?.title === "string" ? row.title.trim().replace(/\s+/g, " ") : "";
-    const description = typeof row?.description === "string" ? row.description.trim().replace(/\s+/g, " ") : "";
-    if (title.length > 180) throw new PortalError(`Блок № ${blockId}: название — до 180 символов.`);
-    if (description.length > 500) throw new PortalError(`Блок № ${blockId}: описание — до 500 символов.`);
-    return { examId, blockId, title, description };
-  });
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(82341)`);
-    for (const row of prepared) {
-      await tx.insert(examBlocks).values(row)
-        .onConflictDoUpdate({ target: [examBlocks.examId, examBlocks.blockId], set: { title: row.title, description: row.description } });
-    }
-  });
-  return listExamBlocks(examId);
 }
 /** Массовые действия над вопросами одного теста: удаление, перенос в блок, перенос в другой тест. */
 export async function bulkQuestions(input: Record<string, unknown>) {

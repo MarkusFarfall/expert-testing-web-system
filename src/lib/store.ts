@@ -3,7 +3,7 @@ import { answers, attempts, bankBackups, exams, questions, settings } from "@/db
 import { and, asc, count, desc, eq, gte, ilike, lt, sql } from "drizzle-orm";
 import { randomInt, randomUUID } from "node:crypto";
 import { seedBank } from "@/lib/seed";
-import { blockCatalog, type AttemptData, type ExamData, type Overview, type QuestionData, type ResultRow } from "@/lib/types";
+import { type AttemptData, type ExamData, type Overview, type QuestionData, type ResultRow } from "@/lib/types";
 
 export class PortalError extends Error {
   constructor(message: string, public status = 400, public details?: string[]) { super(message); }
@@ -148,7 +148,7 @@ export async function getOverview(examId?: number): Promise<Overview> {
   ]);
   return {
     questionCount: rows.reduce((n, r) => n + r.count, 0), blockCount: rows.length, completedCount: completed[0].value,
-    blocks: rows.map((b) => ({ ...b, title: blockCatalog.find((c) => c.id === b.id)?.title ?? `Тематический блок № ${b.id}`, description: blockCatalog.find((c) => c.id === b.id)?.description ?? "Вопросы из импортированного банка" })),
+    blocks: rows,
     updatedAt: meta.find((m) => m.key === "bank_updated")?.value ?? new Date().toISOString(),
     isDemo: meta.find((m) => m.key === "demo_bank")?.value === "1",
     exams: examList,
