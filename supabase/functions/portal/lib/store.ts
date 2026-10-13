@@ -1,7 +1,6 @@
 import { db } from "./db.ts";
 import { answers, attempts, bankBackups, exams, questions, settings } from "./schema.ts";
 import { and, asc, count, desc, eq, gt, gte, ilike, lt, sql } from "./drizzle.ts";
-import { randomInt, randomUUID } from "node:crypto";
 import { seedBank } from "./seed.ts";
 import { blockCatalog, type AttemptData, type ExamData, type Overview, type QuestionData, type ResultRow } from "./types.ts";
 
@@ -10,7 +9,14 @@ export class PortalError extends Error {
 }
 let ready: Promise<void> | undefined;
 export function ensureSeed() {
-  if (!ready) ready = db.transaction(async (tx) => {
+  if (!ready) ready = initSeed().catch((error) => { ready = undefined; throw error; });
+  return ready;
+}
+async function initSeed() {
+  // Быстрый путь: база уже инициализирована — не берём блокировку и не открываем транзакцию.
+  const flag = await db.select({ value: settings.value }).from(settings).where(eq(settings.key, "initialized"));
+  if (flag.length) return;
+  await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(82341)`);
     if ((await tx.select().from(settings).where(eq(settings.key, "initialized"))).length) return;
     const existing = await tx.select({ value: count() }).from(questions);
@@ -30,8 +36,7 @@ export function ensureSeed() {
       { key: "bank_updated", value: new Date().toISOString() },
       { key: "demo_bank", value: existing[0].value ? "0" : "1" },
     ]).onConflictDoNothing();
-  }).catch((error) => { ready = undefined; throw error; });
-  return ready;
+  });
 }
 export async function listExams(): Promise<ExamData[]> {
   await ensureSeed();
@@ -68,10 +73,8 @@ type BankRow = { blockId: number; number: number; text: string; answers: { numbe
 export async function backupBank(examId: number, reason: string) {
   const [exam] = await db.select().from(exams).where(eq(exams.id, examId));
   if (!exam) return null;
-  const [qs, ans] = await Promise.all([
-    db.select().from(questions).where(eq(questions.examId, examId)).orderBy(asc(questions.blockId), asc(questions.number)),
-    db.select().from(answers).innerJoin(questions, eq(questions.id, answers.questionId)).where(eq(questions.examId, examId)).orderBy(asc(answers.number)),
-  ]);
+  const qs = await db.select().from(questions).where(eq(questions.examId, examId)).orderBy(asc(questions.blockId), asc(questions.number));
+  const ans = await db.select().from(answers).innerJoin(questions, eq(questions.id, answers.questionId)).where(eq(questions.examId, examId)).orderBy(asc(answers.number));
   if (!qs.length) return null;
   const byQuestion = new Map<number, { number: number; text: string; correct: boolean }[]>();
   for (const row of ans) {
@@ -138,14 +141,14 @@ export async function getOverview(examId?: number): Promise<Overview> {
   await ensureSeed();
   const scoped = examId !== undefined;
   if (scoped && !(await db.select({ id: exams.id }).from(exams).where(eq(exams.id, examId))).length) throw new PortalError("Тест не найден.", 404);
-  const [rows, completed, meta, examList] = await Promise.all([
-    db.select({ id: questions.blockId, count: count() }).from(questions)
+  // Запросы выполняем последовательно: пулер Supavisor (транзакционный режим)
+  // не переносит параллельные запросы в одном клиенте postgres.js.
+  const rows = await db.select({ id: questions.blockId, count: count() }).from(questions)
       .where(scoped ? eq(questions.examId, examId) : sql`true`)
-      .groupBy(questions.blockId).orderBy(asc(questions.blockId)),
-    db.select({ value: count() }).from(attempts).where(scoped ? and(eq(attempts.status, "completed"), eq(attempts.examId, examId)) : eq(attempts.status, "completed")),
-    db.select().from(settings),
-    listExams(),
-  ]);
+      .groupBy(questions.blockId).orderBy(asc(questions.blockId));
+  const completed = await db.select({ value: count() }).from(attempts).where(scoped ? and(eq(attempts.status, "completed"), eq(attempts.examId, examId)) : eq(attempts.status, "completed"));
+  const meta = await db.select().from(settings);
+  const examList = await listExams();
   return {
     questionCount: rows.reduce((n, r) => n + r.count, 0), blockCount: rows.length, completedCount: completed[0].value,
     blocks: rows.map((b) => ({ ...b, title: blockCatalog.find((c) => c.id === b.id)?.title ?? `Тематический блок № ${b.id}`, description: blockCatalog.find((c) => c.id === b.id)?.description ?? "Вопросы из импортированного банка" })),
@@ -156,10 +159,8 @@ export async function getOverview(examId?: number): Promise<Overview> {
 }
 export async function getQuestionBank(withCorrect = false, examId?: number): Promise<QuestionData[]> {
   await ensureSeed();
-  const [qs, ans] = await Promise.all([
-    db.select().from(questions).where(examId !== undefined ? eq(questions.examId, examId) : sql`true`).orderBy(asc(questions.blockId), asc(questions.number)),
-    db.select().from(answers).orderBy(asc(answers.number)),
-  ]);
+  const qs = await db.select().from(questions).where(examId !== undefined ? eq(questions.examId, examId) : sql`true`).orderBy(asc(questions.blockId), asc(questions.number));
+  const ans = await db.select().from(answers).orderBy(asc(answers.number));
   const grouped = new Map<number, QuestionData["answers"]>();
   for (const a of ans) {
     if (!grouped.has(a.questionId)) grouped.set(a.questionId, []);
@@ -196,14 +197,14 @@ export async function createAttempt(input: Record<string, unknown>, visitorId: s
     for (const blockId of new Set(all.map((q) => q.blockId))) {
       const group = all.filter((q) => q.blockId === blockId);
       if (group.length < amount) throw new PortalError(`В блоке № ${blockId} только ${group.length} вопросов. Уменьшите размер билета.`);
-      for (let i = group.length - 1; i > 0; i--) { const j = randomInt(i + 1); [group[i], group[j]] = [group[j], group[i]]; }
+      for (let i = group.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [group[i], group[j]] = [group[j], group[i]]; }
       selected.push(...group.slice(0, amount));
     }
   }
   if (!selected.length) throw new PortalError("По выбранным условиям нет вопросов. Измените диапазон или блок.");
   if (selected.some((q) => q.answers.length < 2 || q.answers.filter((a) => a.correct).length !== 1)) throw new PortalError("Банк вопросов содержит ошибку. Обратитесь к администратору.", 409);
   const timer = integer(input.timerMinutes ?? 0, "Время теста", 0, 180);
-  const id = randomUUID();
+  const id = crypto.randomUUID();
   await db.insert(attempts).values({ id, visitorId, fullName, mode: input.mode, snapshot: selected, total: selected.length, timeLimit: timer * 60, examId });
   return { id };
 }

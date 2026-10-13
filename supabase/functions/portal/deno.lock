@@ -1,10 +1,14 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:@noble/hashes@1.5.0": "1.5.0",
     "npm:drizzle-orm@0.45.2": "0.45.2_postgres@3.4.5",
     "npm:postgres@3.4.5": "3.4.5"
   },
   "npm": {
+    "@noble/hashes@1.5.0": {
+      "integrity": "sha512-1j6kQFb7QRru7eKN3ZDvRcP13rugwdxZqCjbiAVZfIJwgj2A65UmT4TgARXGlXgnRkORLTDTrO19ZErt7+QXgA=="
+    },
     "drizzle-orm@0.45.2_postgres@3.4.5": {
       "integrity": "sha512-kY0BSaTNYWnoDMVoyY8uxmyHjpJW1geOmBMdSSicKo9CIIWkSxMIj2rkeSR51b8KAPB7m+qysjuHme5nKP+E5Q==",
       "dependencies": [

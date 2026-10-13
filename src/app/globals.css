@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-@font-face{font-family:Golos;src:url('/fonts/Golos.ttf') format('truetype');font-style:normal;font-weight:100 900;font-display:swap}
 @theme inline{--font-sans:Golos,Arial,sans-serif;--color-brand:#2454a4}
 :root{--blue:#2454a4;--blue-dark:#1d4387;--navy:#1c2f4e;--text:#34445c;--muted:#7a8596;--border:#e3e8f0;--surface:#f5f7fb;--pale:#edf3fc;--green:#3e947c}
 *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:100px}body{margin:0;color:var(--text);background:var(--surface);font-family:Golos,Arial,sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}button,input,select,textarea{font:inherit}button,a{-webkit-tap-highlight-color:transparent}button{cursor:pointer}a{color:inherit;text-decoration:none}button:disabled{cursor:not-allowed;opacity:.55}button,a,input,select,textarea{outline-offset:4px}button:focus-visible,a:focus-visible{outline:3px solid #759cd9}input:focus,select:focus,textarea:focus{outline:0;border-color:#739bd8;box-shadow:0 0 0 3px #2454a414}svg{flex-shrink:0}h1,h2,h3,h4,p{margin:0}h1,h2,h3,h4{color:var(--navy)}::selection{background:#d8e6ff;color:#173970}

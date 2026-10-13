@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { accessAttempt, createAttempt, createExam, deleteBackup, deleteExam, deleteQuestion, ensureSeed, getOverview, getQuestionBank, listBackups, listExams, listResults, PortalError, restoreBackup, saveQuestion, updateExam } from "./store.ts";
 import { adminHeader, adminStatus, isAdmin, login, logout, requireAdmin } from "./auth.ts";
 import { importBankJson } from "./import.ts";
@@ -31,15 +30,15 @@ export async function handleRequest(request: Request): Promise<Response> {
     if (method === "GET" && key === "questions") return json(await getQuestionBank(false, examId));
     if (method === "GET" && key === "results") return json(visitor ? await listResults(params, visitor) : []);
     if (method === "POST" && key === "tests") {
-      const visitorId = visitor ?? randomUUID();
+      const visitorId = visitor ?? crypto.randomUUID();
       const result = await createAttempt(await request.json(), visitorId);
       return new Response(JSON.stringify(result), { status: 201, headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store", "x-visitor-id": visitorId } });
     }
     if (path[0] === "tests" && path[1]) {
       const admin = await isAdmin(adminToken);
-      if (method === "GET" && path.length === 2) return json(await accessAttempt(path[1], visitor, admin));
-      if (method === "PATCH" && path.length === 2) return json(await accessAttempt(path[1], visitor, false, "answer", await request.json()));
-      if (method === "POST" && path[2] === "finish") return json(await accessAttempt(path[1], visitor, false, "finish"));
+      if (method === "GET" && path.length === 2) return json(await accessAttempt(path[1], visitor ?? undefined, admin));
+      if (method === "PATCH" && path.length === 2) return json(await accessAttempt(path[1], visitor ?? undefined, false, "answer", await request.json()));
+      if (method === "POST" && path[2] === "finish") return json(await accessAttempt(path[1], visitor ?? undefined, false, "finish"));
     }
     if (key === "admin/session" && method === "GET") return json(await adminStatus(adminToken));
     if (key === "admin/login" && method === "POST") {
