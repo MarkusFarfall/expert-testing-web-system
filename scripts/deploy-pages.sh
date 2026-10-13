@@ -11,6 +11,10 @@ echo "▶ Сборка статики (API: $API_BASE)"
 NEXT_PUBLIC_API_BASE="$API_BASE" NEXT_PUBLIC_API_FALLBACKS="$API_FALLBACKS" NEXT_PUBLIC_BASE_PATH="$BASE_PATH" npm run build
 
 touch out/.nojekyll
+# Версия сервис-воркера: при каждой публикации новая — установленные приложения обновляются сами.
+BUILD_STAMP="$(date -u +%Y%m%d%H%M%S)"
+sed -i "s/__BUILD__/${BUILD_STAMP}/" out/sw.js
+echo "▶ Сервис-воркер: версия ${BUILD_STAMP}"
 echo "▶ Публикация ветки gh-pages"
 cd out
 TMP="$(mktemp -d)"

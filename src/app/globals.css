@@ -19,3 +19,8 @@
 @media(min-width:1025px){.hero{padding-top:24px;padding-bottom:24px}.hero h1{font-size:38px;line-height:1.13;margin:11px 0}.hero-copy>p{font-size:13px;line-height:1.75}.hero-more{font-size:11px}.hero-benefits{font-size:9.5px;margin-top:17px}.metric-card div>span{font-size:10px}.mode-description{font-size:12px;line-height:1.7}.mode-features{font-size:11px}.mode-button{font-size:10.5px}.mode-bottom-note{font-size:9px}.section-heading h2{font-size:21px;line-height:1.3}.section-heading p{font-size:11px}.subtle-link{font-size:10.5px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}.mode-card:hover{transform:none}}
 @media print{.sidebar,.topbar,.footer,.breadcrumbs,.no-print,.result-actions,.review-heading>.button{display:none!important}.main-area{margin:0}.main-content{padding:10px}.result-hero,.review-card{break-inside:avoid}.page-enter{animation:none}}
+
+.pwa-install{position:fixed;right:16px;bottom:16px;z-index:70;display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:14px;padding:10px 12px;box-shadow:0 14px 40px rgba(28,47,78,.16);max-width:calc(100vw - 32px)}
+.pwa-install>span{font-size:13px;color:var(--navy);font-weight:600}
+.pwa-install .button{padding:7px 12px;font-size:13px}
+@media (max-width:560px){.pwa-install{left:16px;right:16px;bottom:12px;flex-wrap:wrap;justify-content:center;text-align:center}}
