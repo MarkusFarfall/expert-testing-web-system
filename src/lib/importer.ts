@@ -115,7 +115,7 @@ export async function importBank(form: FormData) {
     if (correct !== 1) errors.push(`Вопрос Id=${q.id}: должен быть ровно один верный ответ (найдено ${correct}).`);
   }
   if (errors.length) throw new PortalError(`Импорт отменён: найдено проблем — ${errors.length}. База не изменена.`, 422, errors.slice(0, 150));
-  await backupBank(examId, "Перед импортом");
+  const backupId = await backupBank(examId, "Перед импортом");
   await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(82341)`);
     await tx.delete(questions).where(eq(questions.examId, examId));
@@ -130,7 +130,7 @@ export async function importBank(form: FormData) {
     for (let i = 0; i < aInsert.length; i += 1000) await tx.insert(answers).values(aInsert.slice(i, i + 1000));
     for (const entry of [{ key: "demo_bank", value: "0" }, { key: "bank_updated", value: new Date().toISOString() }]) await tx.insert(settings).values(entry).onConflictDoUpdate({ target: settings.key, set: { value: entry.value } });
   });
-  return { questions: qParsed.length, answers: aParsed.length, normalized, message: `Банк обновлён: ${qParsed.length} вопросов, ${aParsed.length} ответов. Нормализовано: ${normalized}.` };
+  return { questions: qParsed.length, answers: aParsed.length, normalized, backupId, message: `Банк обновлён: ${qParsed.length} вопросов, ${aParsed.length} ответов. Нормализовано: ${normalized}.${backupId ? " Копия предыдущего банка сохранена — восстановить можно во вкладке «Тесты (банки)»." : ""}` };
 }
 export async function importTemplate(type: string) {
   const workbook = new ExcelJS.Workbook();
