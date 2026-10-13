@@ -45,13 +45,14 @@ export function TestingSetup({ overview: initial }: { overview: Overview }) {
 export function TestRunner({ id }: { id: string }) {
   const router = useRouter();
   const { data: attempt, setData: setAttempt, error: loadError } = useApi<AttemptData>(`tests/${id}`);
-  const [index, setIndex] = useState(0), [saving, setSaving] = useState(false), [error, setError] = useState("");
+  const [index, setIndex] = useState(0), [saving, setSaving] = useState(0), [error, setError] = useState("");
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const [confirm, setConfirm] = useState(false), [finishing, setFinishing] = useState(false), [remaining, setRemaining] = useState<number | null>(null);
   const initialized = useRef(false), finishLock = useRef(false);
   const finish = useCallback(async () => {
     if (finishLock.current) return;
     finishLock.current = true; setFinishing(true); setError("");
-    try { await api(`tests/${id}/finish`, { method: "POST" }); router.replace(`/results/${id}`); }
+    try { await saveQueue.current.catch(() => undefined); await api(`tests/${id}/finish`, { method: "POST" }); router.replace(`/results/${id}`); }
     catch (e) { setError((e as Error).message); finishLock.current = false; setFinishing(false); setConfirm(false); }
   }, [id, router]);
   useEffect(() => {
@@ -66,21 +67,34 @@ export function TestRunner({ id }: { id: string }) {
     tick(); const interval = setInterval(tick, 1000); return () => clearInterval(interval);
   }, [attempt?.startedAt, attempt?.timeLimit, attempt?.status]);
   useEffect(() => { if (remaining === 0 && attempt?.status === "active") void finish(); }, [remaining, attempt?.status, finish]);
-  async function selectAnswer(answerId: number) {
-    if (!attempt || saving || finishing) return;
-    const question = attempt.questions[index], previous = attempt;
-    setSaving(true); setError(""); setAttempt({ ...attempt, responses: { ...attempt.responses, [question.id]: answerId } });
-    try { setAttempt(await api<AttemptData>(`tests/${id}`, { method: "PATCH", body: JSON.stringify({ questionId: question.id, answerId }) })); }
-    catch (e) { setError((e as Error).message); setAttempt(previous); }
-    finally { setSaving(false); }
+  function selectAnswer(answerId: number) {
+    if (!attempt || finishing) return;
+    const question = attempt.questions[index], before = attempt.responses[question.id];
+    setError("");
+    setAttempt((current) => current ? { ...current, responses: { ...current.responses, [question.id]: answerId } } : current);
+    setSaving((n) => n + 1);
+    const job = saveQueue.current.then(async () => {
+      const fresh = await api<AttemptData>(`tests/${id}`, { method: "PATCH", body: JSON.stringify({ questionId: question.id, answerId }) });
+      setAttempt((current) => current ? { ...fresh, responses: { ...fresh.responses, ...current.responses } } : fresh);
+    });
+    saveQueue.current = job.catch(() => undefined);
+    job.catch((e) => {
+      setError((e as Error).message);
+      setAttempt((current) => {
+        if (!current) return current;
+        const responses = { ...current.responses };
+        if (before === undefined) delete responses[question.id]; else responses[question.id] = before;
+        return { ...current, responses };
+      });
+    }).finally(() => setSaving((n) => Math.max(0, n - 1)));
   }
   if (loadError) return <ErrorBox message={loadError}/>;
   if (!attempt || attempt.status === "completed") return <Loading text="Подготавливаем ваш тест…"/>;
   const question = attempt.questions[index], answered = Object.keys(attempt.responses).length;
   const initials = attempt.fullName.split(" ").slice(0, 2).map((p) => p[0]).join("");
   return <><div className="test-header"><div className="test-user"><span className="avatar">{initials}</span><div><h2>{attempt.fullName}</h2><p>{modeLabels[attempt.mode]} режим · Индивидуальное тестирование</p></div></div><div className={`timer ${remaining !== null && remaining < 60 ? "urgent" : ""}`}><Clock3 size={17}/>{remaining !== null ? `${String(Math.floor(remaining / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}` : "Без ограничения"}</div></div>
-    <ErrorBox message={error}/><div className="test-layout"><section className="test-question-panel"><div className="progress-top"><span>Вопрос <strong>{index + 1}</strong> из {attempt.total}</span><span>{answered} ответов сохранено</span></div><div className="progress-track" role="progressbar" aria-label="Прогресс тестирования" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={attempt.total}><div className="progress-fill" style={{ width: `${answered / attempt.total * 100}%` }}/></div><div className="question-block-label"><Layers3 size={13}/>{getBlockTitle(question.blockId)} · № {question.number}</div><h1>{question.text}</h1><p className="question-instruction" id="answer-instruction">Выберите один правильный ответ</p><div className="answer-list" role="radiogroup" aria-labelledby="answer-instruction">{question.answers.map((answer, i) => <label className={`answer-choice ${attempt.responses[question.id] === answer.id ? "chosen" : ""}`} key={answer.id}><input type="radio" name={`answer-${question.id}`} checked={attempt.responses[question.id] === answer.id} onChange={() => selectAnswer(answer.id)} disabled={saving || finishing}/><span><i className="answer-letter">{i + 1}.</i>{answer.text}</span></label>)}</div><div className="saved-status" role="status">{saving ? <><LoaderCircle size={12} className="spin"/>Сохраняем ответ…</> : attempt.responses[question.id] ? <><CheckCircle2 size={12}/>Ответ сохранён на сервере</> : <span style={{ color: "#a1b0c5" }}>Вы сможете изменить ответ до завершения теста</span>}</div><div className="test-question-actions"><button className="button" onClick={() => setIndex(index - 1)} disabled={index === 0 || saving || finishing}><ArrowLeft size={15}/>Назад</button>{index < attempt.total - 1 ? <button className="button primary" onClick={() => setIndex(index + 1)} disabled={saving || finishing || !attempt.responses[question.id]}>Далее<ArrowRight size={16}/></button> : <button className="button primary" onClick={() => setConfirm(true)} disabled={saving || finishing}>Завершить тест<Check size={16}/></button>}</div></section>
-    <aside className="test-sidebar"><div className="content-panel navigator-panel"><h3>Ваш билет</h3><p>Можно вернуться к любому вопросу</p><div className="question-navigator">{attempt.questions.map((q, n) => <button aria-label={`Вопрос ${n + 1}${attempt.responses[q.id] ? ", ответ сохранён" : ""}`} aria-current={n === index ? "step" : undefined} className={`question-nav-button ${attempt.responses[q.id] ? "answered" : ""} ${n === index ? "current" : ""}`} onClick={() => setIndex(n)} disabled={saving || finishing} key={q.id}>{n + 1}</button>)}</div><div className="navigator-legend"><span><i className="legend-dot answered"/>Ответ сохранён</span><span><i className="legend-dot"/>Ожидает ответа</span></div><button className="button full" onClick={() => setConfirm(true)} disabled={saving || finishing}>Завершить досрочно</button></div><Notice>Ответы хранятся на сервере. Обновление этой страницы не удалит прогресс.</Notice></aside></div>
+    <ErrorBox message={error}/><div className="test-layout"><section className="test-question-panel"><div className="progress-top"><span>Вопрос <strong>{index + 1}</strong> из {attempt.total}</span><span>{answered} ответов сохранено{saving > 0 ? " · идёт сохранение" : ""}</span></div><div className="progress-track" role="progressbar" aria-label="Прогресс тестирования" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={attempt.total}><div className="progress-fill" style={{ width: `${answered / attempt.total * 100}%` }}/></div><div className="question-block-label"><Layers3 size={13}/>{getBlockTitle(question.blockId)} · № {question.number}</div><h1>{question.text}</h1><p className="question-instruction" id="answer-instruction">Выберите один правильный ответ</p><div className="answer-list" role="radiogroup" aria-labelledby="answer-instruction">{question.answers.map((answer, i) => <label className={`answer-choice ${attempt.responses[question.id] === answer.id ? "chosen" : ""}`} key={answer.id}><input type="radio" name={`answer-${question.id}`} checked={attempt.responses[question.id] === answer.id} onChange={() => selectAnswer(answer.id)} disabled={finishing}/><span><i className="answer-letter">{i + 1}.</i>{answer.text}</span></label>)}</div><div className="saved-status" role="status">{saving ? <><LoaderCircle size={12} className="spin"/>Сохраняем на сервере…</> : attempt.responses[question.id] ? <><CheckCircle2 size={12}/>Ответ сохранён на сервере</> : <span style={{ color: "#a1b0c5" }}>Вы сможете изменить ответ до завершения теста</span>}</div><div className="test-question-actions"><button className="button" onClick={() => setIndex(index - 1)} disabled={index === 0 || finishing}><ArrowLeft size={15}/>Назад</button>{index < attempt.total - 1 ? <button className="button primary" onClick={() => setIndex(index + 1)} disabled={finishing || !attempt.responses[question.id]}>Далее<ArrowRight size={16}/></button> : <button className="button primary" onClick={() => setConfirm(true)} disabled={finishing}>Завершить тест<Check size={16}/></button>}</div></section>
+    <aside className="test-sidebar"><div className="content-panel navigator-panel"><h3>Ваш билет</h3><p>Можно вернуться к любому вопросу</p><div className="question-navigator">{attempt.questions.map((q, n) => <button aria-label={`Вопрос ${n + 1}${attempt.responses[q.id] ? ", ответ сохранён" : ""}`} aria-current={n === index ? "step" : undefined} className={`question-nav-button ${attempt.responses[q.id] ? "answered" : ""} ${n === index ? "current" : ""}`} onClick={() => setIndex(n)} disabled={finishing} key={q.id}>{n + 1}</button>)}</div><div className="navigator-legend"><span><i className="legend-dot answered"/>Ответ сохранён</span><span><i className="legend-dot"/>Ожидает ответа</span></div><button className="button full" onClick={() => setConfirm(true)} disabled={finishing}>Завершить досрочно</button></div><Notice>Ответы хранятся на сервере. Обновление этой страницы не удалит прогресс.</Notice></aside></div>
     {confirm && <Modal title="Завершить тестирование?" onClose={() => { if (!finishing) setConfirm(false); }}><p className="modal-description">Вы ответили на {answered} из {attempt.total} вопросов. {answered < attempt.total ? `Без ответа осталось: ${attempt.total - answered}. Они будут учтены как неверные.` : "Все ответы сохранены. После завершения вы увидите результат и подробный разбор."}</p><Notice>После завершения изменить ответы уже нельзя.</Notice><div className="modal-actions"><button className="button" onClick={() => setConfirm(false)} disabled={finishing}>Продолжить тест</button><button className="button primary" onClick={finish} disabled={finishing}>{finishing && <LoaderCircle className="spin" size={14}/>}Завершить</button></div></Modal>}
   </>;
 }

@@ -3,12 +3,26 @@ import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+
+let cachedFont: Buffer | null = null;
+async function fontData(): Promise<Buffer> {
+  if (cachedFont) return cachedFont;
+  try { cachedFont = await readFile(path.join(process.cwd(), "public/fonts/DejaVuSans.ttf")); return cachedFont; }
+  catch {
+    const base = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+    if (!base) throw new Error("Шрифт для PDF недоступен.");
+    const response = await fetch(`https://${base}/fonts/DejaVuSans.ttf`);
+    if (!response.ok) throw new Error("Шрифт для PDF недоступен.");
+    cachedFont = Buffer.from(await response.arrayBuffer());
+    return cachedFont;
+  }
+}
 import { formatDate, getBlockTitle, modeLabels, type AttemptData, type ResultRow } from "@/lib/types";
 
 export async function makePdf(title: string, subtitle: string, paragraphs: string[]) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
-  const font = await pdf.embedFont(await readFile(path.join(process.cwd(), "public/fonts/DejaVuSans.ttf")), { subset: true });
+  const font = await pdf.embedFont(await fontData(), { subset: true });
   pdf.setTitle(title); pdf.setAuthor("КТПП · Экспертиза"); pdf.setLanguage("ru-RU");
   let page = pdf.addPage([595.28, 841.89]);
   let y = 0;
