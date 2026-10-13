@@ -129,10 +129,10 @@ export async function deleteBackup(id: number) {
 }
 export async function deleteExam(id: number) {
   if (!Number.isSafeInteger(id) || id < 1) throw new PortalError("Некорректный идентификатор теста.");
-  await backupBank(id, "Удаление теста");
+  const backupId = await backupBank(id, "Удаление теста");
   const deleted = await db.delete(exams).where(eq(exams.id, id)).returning();
   if (!deleted.length) throw new PortalError("Тест не найден.", 404);
-  return { ok: true };
+  return { ok: true, backupId };
 }
 export async function getOverview(examId?: number): Promise<Overview> {
   await ensureSeed();

@@ -45,7 +45,7 @@ function QuestionManager({ onUpdated, initialExamId, onOpenTests }: { onUpdated:
   const currentExam = (examList ?? []).find((x) => String(x.id) === examId) ?? null;
   async function removeExam() {
     if (!removingExam) return; setBusy(true); setActionError("");
-    try { await api(`admin/exams/${removingExam.id}`, { method: "DELETE" }); setExamNotice(`Тест «${removingExam.name}» удалён. Копия банка сохранена — восстановить можно во вкладке «Тесты (банки)».`); setRemovingExam(null); refreshExams(); setExamId(""); setBlock(""); setPage(1); onUpdated(); }
+    try { const res = await api<{ backupId?: number | null }>(`admin/exams/${removingExam.id}`, { method: "DELETE" }); setExamNotice(res.backupId ? `Тест «${removingExam.name}» удалён. Копия банка сохранена — восстановить можно во вкладке «Тесты (банки)».` : `Тест «${removingExam.name}» удалён.`); setRemovingExam(null); refreshExams(); setExamId(""); setBlock(""); setPage(1); onUpdated(); }
     catch (e) { setActionError((e as Error).message); }
     finally { setBusy(false); }
   }
@@ -87,7 +87,7 @@ function ExamManager({ onUpdated, onOpenQuestions }: { onUpdated: () => void; on
   const [busy, setBusy] = useState(false), [actionError, setActionError] = useState("");
   async function remove() {
     if (!deleting) return; setBusy(true); setActionError("");
-    try { await api(`admin/exams/${deleting.id}`, { method: "DELETE" }); setNotice(`Тест «${deleting.name}» удалён. Копия банка сохранена — её можно восстановить ниже.`); setDeleting(null); refresh(); refreshBackups(); onUpdated(); }
+    try { const res = await api<{ backupId?: number | null }>(`admin/exams/${deleting.id}`, { method: "DELETE" }); setNotice(res.backupId ? `Тест «${deleting.name}» удалён. Копия банка сохранена — её можно восстановить ниже, в разделе «Копии банков».` : `Тест «${deleting.name}» удалён.`); setDeleting(null); refresh(); refreshBackups(); onUpdated(); }
     catch (e) { setActionError((e as Error).message); }
     finally { setBusy(false); }
   }
