@@ -5,8 +5,18 @@ import Link from "next/link";
 
 export class ApiError extends Error { constructor(message: string, public details?: string[]) { super(message); } }
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`/api/portal/${path}`, { ...options, headers: { ...(options?.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}), ...options?.headers }, cache: "no-store" });
-  const data = await response.json();
+  const { API_BASE, getAdminToken, getVisitorId, setAdminToken } = await import("@/lib/session");
+  const token = getAdminToken();
+  const headers: Record<string, string> = {
+    ...(options?.body && !(options.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
+    "x-visitor-id": getVisitorId(),
+    ...(token ? { "x-admin-token": token } : {}),
+    ...(options?.headers as Record<string, string> | undefined),
+  };
+  const response = await fetch(`${API_BASE}/${path}`, { ...options, headers, cache: "no-store" });
+  const data = await response.json().catch(() => ({}));
+  if (path === "admin/logout") setAdminToken(null);
+  if (data && typeof data === "object" && typeof (data as { token?: string }).token === "string") setAdminToken((data as { token: string }).token);
   if (!response.ok) throw new ApiError(data.error || "Не удалось выполнить запрос.", data.details);
   return data as T;
 }

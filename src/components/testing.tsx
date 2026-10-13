@@ -25,7 +25,7 @@ export function TestingSetup({ overview: initial }: { overview: Overview }) {
     event.preventDefault(); setBusy(true); setError("");
     try {
       const result = await api<{ id: string }>("tests", { method: "POST", body: JSON.stringify({ fullName, mode, blockId, from, to, perBlock: Math.min(perBlock, maxPerBlock), timerMinutes: timer ? timerMinutes : 0, examId: Number(examId) }) });
-      router.push(`/test/${result.id}`);
+      router.push(`/test?id=${result.id}`);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
   if (examList && !examList.length) return <><PageHeading title="Тестирование" description="Выберите тест, режим и приступайте к вопросам."/><div className="empty-state"><span className="aside-icon"><GraduationCap size={26}/></span><h2>Тесты пока не заведены</h2><p>Как только администратор создаст тест и загрузит в него вопросы, он появится здесь.</p><Link href="/questions" className="button">Посмотреть банк вопросов</Link></div></>;
@@ -52,12 +52,12 @@ export function TestRunner({ id }: { id: string }) {
   const finish = useCallback(async () => {
     if (finishLock.current) return;
     finishLock.current = true; setFinishing(true); setError("");
-    try { await saveQueue.current.catch(() => undefined); await api(`tests/${id}/finish`, { method: "POST" }); router.replace(`/results/${id}`); }
+    try { await saveQueue.current.catch(() => undefined); await api(`tests/${id}/finish`, { method: "POST" }); router.replace(`/results/view?id=${id}`); }
     catch (e) { setError((e as Error).message); finishLock.current = false; setFinishing(false); setConfirm(false); }
   }, [id, router]);
   useEffect(() => {
     if (!attempt) return;
-    if (attempt.status === "completed") { router.replace(`/results/${id}`); return; }
+    if (attempt.status === "completed") { router.replace(`/results/view?id=${id}`); return; }
     if (!initialized.current) { const first = attempt.questions.findIndex((q) => !attempt.responses[q.id]); setIndex(first >= 0 ? first : 0); initialized.current = true; }
   }, [attempt, id, router]);
   useEffect(() => {
@@ -102,13 +102,13 @@ export function TestRunner({ id }: { id: string }) {
 export function TestResult({ id }: { id: string }) {
   const router = useRouter();
   const { data, error } = useApi<AttemptData>(`tests/${id}`);
-  const [all, setAll] = useState(false);
-  useEffect(() => { if (data?.status === "active") router.replace(`/test/${id}`); }, [data, id, router]);
+  const [all, setAll] = useState(false), [pdfBusy, setPdfBusy] = useState(false);
+  useEffect(() => { if (data?.status === "active") router.replace(`/test?id=${id}`); }, [data, id, router]);
   if (error) return <ErrorBox message={error}/>;
   if (!data || data.status !== "completed") return <Loading text="Формируем результат…"/>;
   const mistakes = data.questions.filter((q) => !q.answers.some((a) => a.correct && a.id === data.responses[q.id]));
   const review = all ? data.questions : mistakes;
-  return <><PageHeading title="Результат тестирования" description="Каждый пройденный тест — ещё один шаг к уверенной экспертизе." action={<Link href="/results" className="subtle-link"><ArrowLeft size={15}/>Мои результаты</Link>}/><section className="result-hero"><div className="result-ring" style={{ "--score": `${data.percentage}%` } as CSSProperties}><strong>{data.percentage}%</strong><span>ПРАВИЛЬНЫХ ОТВЕТОВ</span></div><div className="result-content"><span className="badge green"><CircleCheck size={12}/>Тест завершён</span><h2>{data.percentage >= 80 ? "Отличный результат!" : data.percentage >= 60 ? "Хорошая основа для роста" : "Продолжайте подготовку"}</h2><p>{data.fullName}</p><div className="result-summary"><span className="correct"><CheckCircle2 size={16}/>{data.correctCount} правильно</span><span className="incorrect"><XCircle size={16}/>{data.total - data.correctCount} неправильно</span></div><div className="result-meta">{data.examName && <span>{data.examName}</span>}<span>{formatDate(data.finishedAt || data.startedAt, true)}</span><span>{modeLabels[data.mode]} режим</span><span>{data.total} вопросов</span></div></div><div className="result-actions"><Link href={`/testing?mode=${data.mode}`} className="button primary"><RotateCcw size={15}/>Пройти ещё раз</Link><a href={`/api/portal/tests/${data.id}/pdf`} download className="button"><ArrowDownToLine size={15}/>Скачать PDF</a></div></section>
+  return <><PageHeading title="Результат тестирования" description="Каждый пройденный тест — ещё один шаг к уверенной экспертизе." action={<Link href="/results" className="subtle-link"><ArrowLeft size={15}/>Мои результаты</Link>}/><section className="result-hero"><div className="result-ring" style={{ "--score": `${data.percentage}%` } as CSSProperties}><strong>{data.percentage}%</strong><span>ПРАВИЛЬНЫХ ОТВЕТОВ</span></div><div className="result-content"><span className="badge green"><CircleCheck size={12}/>Тест завершён</span><h2>{data.percentage >= 80 ? "Отличный результат!" : data.percentage >= 60 ? "Хорошая основа для роста" : "Продолжайте подготовку"}</h2><p>{data.fullName}</p><div className="result-summary"><span className="correct"><CheckCircle2 size={16}/>{data.correctCount} правильно</span><span className="incorrect"><XCircle size={16}/>{data.total - data.correctCount} неправильно</span></div><div className="result-meta">{data.examName && <span>{data.examName}</span>}<span>{formatDate(data.finishedAt || data.startedAt, true)}</span><span>{modeLabels[data.mode]} режим</span><span>{data.total} вопросов</span></div></div><div className="result-actions"><Link href={`/testing?mode=${data.mode}`} className="button primary"><RotateCcw size={15}/>Пройти ещё раз</Link><button type="button" className="button" disabled={pdfBusy} onClick={async () => { setPdfBusy(true); try { const { exportAttempt } = await import("@/lib/files"); await exportAttempt(data); } catch (e) { window.alert((e as Error).message); } finally { setPdfBusy(false); } }}>{pdfBusy ? <LoaderCircle size={15} className="spin"/> : <ArrowDownToLine size={15}/>}Скачать PDF</button></div></section>
     <div className="review-heading"><div><h2>{all ? "Разбор всех вопросов" : "Работа над ошибками"}</h2><p>Зелёным отмечен правильный ответ, красным — ваш неверный выбор.</p></div><button className="button small" onClick={() => setAll(!all)}>{all ? "Только ошибки" : "Все вопросы"}<ListChecks size={14}/></button></div>
     {!review.length ? <EmptyState icon={<Trophy size={34}/>} title="Ни одной ошибки!" text="Вы правильно ответили на все вопросы. Попробуйте другой блок или новый случайный билет." action={{ href: "/testing?mode=selective", label: "Новый билет" }}/> : review.map((q, index) => <article className="review-card" key={q.id}><div className="question-meta"><span>{getBlockTitle(q.blockId)}</span><span>·</span><span>Вопрос № {q.number}</span></div><h3>{index + 1}. {q.text}</h3>{q.answers.map((answer) => {
       const chosen = data.responses[q.id] === answer.id;
