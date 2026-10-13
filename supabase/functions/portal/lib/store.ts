@@ -139,21 +139,40 @@ export async function deleteExam(id: number) {
 }
 export async function getOverview(examId?: number): Promise<Overview> {
   await ensureSeed();
-  const scoped = examId !== undefined;
-  if (scoped && !(await db.select({ id: exams.id }).from(exams).where(eq(exams.id, examId))).length) throw new PortalError("Тест не найден.", 404);
-  // Запросы выполняем последовательно: пулер Supavisor (транзакционный режим)
-  // не переносит параллельные запросы в одном клиенте postgres.js.
-  const rows = await db.select({ id: questions.blockId, count: count() }).from(questions)
-      .where(scoped ? eq(questions.examId, examId) : sql`true`)
-      .groupBy(questions.blockId).orderBy(asc(questions.blockId));
-  const completed = await db.select({ value: count() }).from(attempts).where(scoped ? and(eq(attempts.status, "completed"), eq(attempts.examId, examId)) : eq(attempts.status, "completed"));
-  const meta = await db.select().from(settings);
-  const examList = await listExams();
+  // Один запрос вместо шести: пулер и холодный старт дорогие, экономим круговые рейсы.
+  const scope = examId ?? null;
+  const [row] = await db.execute<{
+    blocks: { id: number; count: number }[];
+    completed: number;
+    updated: string | null;
+    demo: string | null;
+    exams: { id: number; name: string; description: string; questionCount: number; blockCount: number }[];
+  }>(sql`
+    select
+      coalesce((select json_agg(b order by b.id) from (
+        select q.blockid as id, count(*)::int as count
+        from "TableQuestions" q
+        where ${scope}::int is null or q.exam_id = ${scope}::int
+        group by q.blockid) b), '[]'::json) as blocks,
+      (select count(*)::int from test_attempts
+        where status = 'completed' and (${scope}::int is null or exam_id = ${scope}::int)) as completed,
+      (select value from portal_settings where key = 'bank_updated') as updated,
+      (select value from portal_settings where key = 'demo_bank') as demo,
+      coalesce((select json_agg(e order by e.id) from (
+        select ex.id, ex.name, ex.description,
+          count(q2."Id")::int as "questionCount",
+          count(distinct q2.blockid)::int as "blockCount"
+        from exams ex left join "TableQuestions" q2 on q2.exam_id = ex.id
+        group by ex.id) e), '[]'::json) as exams
+  `);
+  const examList: ExamData[] = row.exams.map((e) => ({ ...e, questionCount: Number(e.questionCount), blockCount: Number(e.blockCount) }));
+  if (examId !== undefined && !examList.some((e) => e.id === examId)) throw new PortalError("Тест не найден.", 404);
+  const rows = row.blocks.map((b) => ({ id: Number(b.id), count: Number(b.count) }));
   return {
-    questionCount: rows.reduce((n, r) => n + r.count, 0), blockCount: rows.length, completedCount: completed[0].value,
+    questionCount: rows.reduce((n, r) => n + r.count, 0), blockCount: rows.length, completedCount: Number(row.completed),
     blocks: rows.map((b) => ({ ...b, title: blockCatalog.find((c) => c.id === b.id)?.title ?? `Тематический блок № ${b.id}`, description: blockCatalog.find((c) => c.id === b.id)?.description ?? "Вопросы из импортированного банка" })),
-    updatedAt: meta.find((m) => m.key === "bank_updated")?.value ?? new Date().toISOString(),
-    isDemo: meta.find((m) => m.key === "demo_bank")?.value === "1",
+    updatedAt: row.updated ?? new Date().toISOString(),
+    isDemo: row.demo === "1",
     exams: examList,
   };
 }
