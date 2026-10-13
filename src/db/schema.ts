@@ -45,6 +45,17 @@ export const attempts = pgTable("test_attempts", {
   examId: integer("exam_id").references(() => exams.id, { onDelete: "set null" }),
 }, (t) => [index("attempt_visitor").on(t.visitorId), index("attempt_date").on(t.startedAt)]);
 
+export const bankBackups = pgTable("bank_backups", {
+  id: serial("id").primaryKey(),
+  examName: text("exam_name").notNull(),
+  description: text("description").notNull().default(""),
+  questionCount: integer("question_count").notNull(),
+  answerCount: integer("answer_count").notNull(),
+  reason: text("reason").notNull().default(""),
+  data: jsonb("data").$type<{ blockId: number; number: number; text: string; answers: { number: number; text: string; correct: boolean }[] }[]>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [index("bank_backups_created_idx").on(t.createdAt)]);
+
 export const settings = pgTable("portal_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),

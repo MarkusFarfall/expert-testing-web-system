@@ -2,7 +2,7 @@ import ExcelJS from "exceljs";
 import { db } from "@/db";
 import { answers, exams, questions, settings } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
-import { PortalError } from "@/lib/store";
+import { backupBank, PortalError } from "@/lib/store";
 
 type Row = Record<string, unknown>;
 const qColumns = ["Id", "question", "blockid", "numberquestion"];
@@ -115,6 +115,7 @@ export async function importBank(form: FormData) {
     if (correct !== 1) errors.push(`Вопрос Id=${q.id}: должен быть ровно один верный ответ (найдено ${correct}).`);
   }
   if (errors.length) throw new PortalError(`Импорт отменён: найдено проблем — ${errors.length}. База не изменена.`, 422, errors.slice(0, 150));
+  await backupBank(examId, "Перед импортом");
   await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(82341)`);
     await tx.delete(questions).where(eq(questions.examId, examId));

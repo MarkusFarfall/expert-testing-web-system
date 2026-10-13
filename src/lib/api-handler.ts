@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { accessAttempt, createAttempt, createExam, deleteExam, deleteQuestion, ensureSeed, getOverview, getQuestionBank, listExams, listResults, PortalError, saveQuestion, updateExam } from "@/lib/store";
+import { accessAttempt, createAttempt, createExam, deleteBackup, deleteExam, deleteQuestion, ensureSeed, getOverview, getQuestionBank, listBackups, listExams, listResults, PortalError, restoreBackup, saveQuestion, updateExam } from "@/lib/store";
 import { adminCookie, adminStatus, isAdmin, login, logout, requireAdmin, visitorCookie } from "@/lib/auth";
 import { importBank, importTemplate } from "@/lib/importer";
 import { exportAttempt, exportStatistics, makePdf } from "@/lib/exports";
@@ -68,6 +68,9 @@ export async function handle(request: NextRequest, context: Context) {
       if (key === "admin/exams" && method === "POST") return json(await createExam(await request.json()), 201);
       if (path[1] === "exams" && path[2] && method === "PATCH") return json(await updateExam(Number(path[2]), await request.json()));
       if (path[1] === "exams" && path[2] && method === "DELETE") return json(await deleteExam(Number(path[2])));
+      if (key === "admin/backups" && method === "GET") return json(await listBackups());
+      if (path[1] === "backups" && path[2] && method === "POST") return json(await restoreBackup(Number(path[2])));
+      if (path[1] === "backups" && path[2] && method === "DELETE") return json(await deleteBackup(Number(path[2])));
       if (key === "admin/questions" && method === "GET") return json(await getQuestionBank(true, examId));
       if (key === "admin/questions" && method === "POST") return json(await saveQuestion(await request.json()), 201);
       if (path[1] === "questions" && path[2] && method === "PATCH") return json(await saveQuestion(await request.json(), Number(path[2])));

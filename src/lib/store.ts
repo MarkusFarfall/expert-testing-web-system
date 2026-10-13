@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { answers, attempts, exams, questions, settings } from "@/db/schema";
+import { answers, attempts, bankBackups, exams, questions, settings } from "@/db/schema";
 import { and, asc, count, desc, eq, gte, ilike, lt, sql } from "drizzle-orm";
 import { randomInt, randomUUID } from "node:crypto";
 import { seedBank } from "@/lib/seed";
@@ -64,8 +64,72 @@ export async function updateExam(id: number, input: Record<string, unknown>) {
   if (Object.keys(patch).length) await db.update(exams).set(patch).where(eq(exams.id, id));
   return { ok: true };
 }
+type BankRow = { blockId: number; number: number; text: string; answers: { number: number; text: string; correct: boolean }[] };
+export async function backupBank(examId: number, reason: string) {
+  const [exam] = await db.select().from(exams).where(eq(exams.id, examId));
+  if (!exam) return null;
+  const [qs, ans] = await Promise.all([
+    db.select().from(questions).where(eq(questions.examId, examId)).orderBy(asc(questions.blockId), asc(questions.number)),
+    db.select().from(answers).innerJoin(questions, eq(questions.id, answers.questionId)).where(eq(questions.examId, examId)).orderBy(asc(answers.number)),
+  ]);
+  if (!qs.length) return null;
+  const byQuestion = new Map<number, { number: number; text: string; correct: boolean }[]>();
+  for (const row of ans) {
+    const list = byQuestion.get(row.TableAnswers.questionId) ?? [];
+    list.push({ number: row.TableAnswers.number, text: row.TableAnswers.text, correct: row.TableAnswers.correct === 1 });
+    byQuestion.set(row.TableAnswers.questionId, list);
+  }
+  const data: BankRow[] = qs.map((q) => ({ blockId: q.blockId, number: q.number, text: q.text, answers: byQuestion.get(q.id) ?? [] }));
+  const [row] = await db.insert(bankBackups).values({
+    examName: exam.name, description: exam.description, reason,
+    questionCount: qs.length, answerCount: ans.length, data,
+  }).returning({ id: bankBackups.id });
+  await db.execute(sql`delete from bank_backups where id not in (select id from bank_backups order by created_at desc limit 20)`);
+  return row.id;
+}
+export async function listBackups() {
+  return db.select({
+    id: bankBackups.id, examName: bankBackups.examName, description: bankBackups.description,
+    questionCount: bankBackups.questionCount, answerCount: bankBackups.answerCount,
+    reason: bankBackups.reason, createdAt: bankBackups.createdAt,
+  }).from(bankBackups).orderBy(desc(bankBackups.createdAt)).limit(20);
+}
+export async function restoreBackup(id: number): Promise<ExamData> {
+  const [backup] = await db.select().from(bankBackups).where(eq(bankBackups.id, id));
+  if (!backup) throw new PortalError("Копия не найдена.", 404);
+  if (!backup.data.length) throw new PortalError("В копии нет вопросов.");
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(82341)`);
+    let name = backup.examName;
+    const taken = async (candidate: string) => (await tx.select({ id: exams.id }).from(exams).where(eq(exams.name, candidate))).length > 0;
+    if (await taken(name)) name = `${backup.examName} (восстановлен)`;
+    let suffix = 2;
+    while (await taken(name)) { name = `${backup.examName} (восстановлен ${suffix++})`; }
+    const [exam] = await tx.insert(exams).values({ name, description: backup.description }).returning();
+    const [lastQ] = await tx.select({ id: sql<number>`coalesce(max(${questions.id}), 0)` }).from(questions);
+    const [lastA] = await tx.select({ id: sql<number>`coalesce(max(${answers.id}), 0)` }).from(answers);
+    let qSeq = Number(lastQ.id), aSeq = Number(lastA.id);
+    const qRows: { id: number; examId: number; text: string; blockId: number; number: number }[] = [];
+    const aRows: { id: number; questionId: number; text: string; number: number; correct: number | null }[] = [];
+    for (const q of backup.data) {
+      const qId = ++qSeq;
+      qRows.push({ id: qId, examId: exam.id, text: q.text, blockId: q.blockId, number: q.number });
+      for (const a of q.answers) aRows.push({ id: ++aSeq, questionId: qId, text: a.text, number: a.number, correct: a.correct ? 1 : null });
+    }
+    for (let i = 0; i < qRows.length; i += 1000) await tx.insert(questions).values(qRows.slice(i, i + 1000));
+    for (let i = 0; i < aRows.length; i += 1000) await tx.insert(answers).values(aRows.slice(i, i + 1000));
+    const blockCount = new Set(qRows.map((q) => q.blockId)).size;
+    return { id: exam.id, name: exam.name, description: exam.description, questionCount: qRows.length, blockCount };
+  });
+}
+export async function deleteBackup(id: number) {
+  const removed = await db.delete(bankBackups).where(eq(bankBackups.id, id)).returning({ id: bankBackups.id });
+  if (!removed.length) throw new PortalError("Копия не найдена.", 404);
+  return { ok: true };
+}
 export async function deleteExam(id: number) {
   if (!Number.isSafeInteger(id) || id < 1) throw new PortalError("Некорректный идентификатор теста.");
+  await backupBank(id, "Удаление теста");
   const deleted = await db.delete(exams).where(eq(exams.id, id)).returning();
   if (!deleted.length) throw new PortalError("Тест не найден.", 404);
   return { ok: true };
