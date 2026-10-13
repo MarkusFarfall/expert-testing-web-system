@@ -98,7 +98,7 @@ export async function exportAttempt(attempt: AttemptData) {
   await makePdf("Результат тестирования", `${attempt.fullName} · ${attempt.examName ?? "Тест"} · ${modeLabels[attempt.mode]} режим · ${formatDate(attempt.finishedAt || attempt.startedAt, true)}`, [
     `Результат: ${attempt.percentage}% · Правильно: ${attempt.correctCount} из ${attempt.total}.`,
     "Работа над ошибками",
-    ...(mistakes.length ? mistakes.flatMap((q, i) => [`${i + 1}. ${q.text} (${getBlockTitle(q.blockId)})`, `Ваш ответ: ${q.answers.find((a) => a.id === attempt.responses[q.id])?.text ?? "Ответ не выбран"}`, `Правильный ответ: ${q.answers.find((a) => a.correct)?.text ?? "—"}`]) : ["Все ответы верны. Ошибок нет."]),
+    ...(mistakes.length ? mistakes.flatMap((q, i) => [`${i + 1}. ${q.text} (${getBlockTitle(q.blockId, q.blockTitle)})`, `Ваш ответ: ${q.answers.find((a) => a.id === attempt.responses[q.id])?.text ?? "Ответ не выбран"}`, `Правильный ответ: ${q.answers.find((a) => a.correct)?.text ?? "—"}`]) : ["Все ответы верны. Ошибок нет."]),
     "Результат отражает прохождение теста и не является документом о присвоении квалификации.",
   ], `ktpp-result-${attempt.id.slice(0, 8)}.pdf`);
 }

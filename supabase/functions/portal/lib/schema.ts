@@ -1,4 +1,4 @@
-import { pgTable, integer, serial, text, timestamp, uuid, jsonb, index, uniqueIndex, check } from "npm:drizzle-orm@0.45.2/pg-core";
+import { pgTable, integer, serial, text, timestamp, uuid, jsonb, index, uniqueIndex, check, primaryKey } from "npm:drizzle-orm@0.45.2/pg-core";
 import { and, asc, count, desc, eq, gt, gte, ilike, lt, sql } from "./drizzle.ts";
 import type { QuestionData } from "./types.ts";
 
@@ -45,6 +45,14 @@ export const attempts = pgTable("test_attempts", {
   examId: integer("exam_id").references(() => exams.id, { onDelete: "set null" }),
 }, (t) => [index("attempt_visitor").on(t.visitorId), index("attempt_date").on(t.startedAt)]);
 
+// Названия тематических блоков — свои у каждого теста (раньше были общие, в коде).
+export const examBlocks = pgTable("exam_blocks", {
+  examId: integer("exam_id").notNull().references(() => exams.id, { onDelete: "cascade" }),
+  blockId: integer("block_id").notNull(),
+  title: text("title").notNull().default(""),
+  description: text("description").notNull().default(""),
+}, (t) => [primaryKey({ columns: [t.examId, t.blockId] })]);
+
 export const bankBackups = pgTable("bank_backups", {
   id: serial("id").primaryKey(),
   examName: text("exam_name").notNull(),
@@ -53,6 +61,7 @@ export const bankBackups = pgTable("bank_backups", {
   answerCount: integer("answer_count").notNull(),
   reason: text("reason").notNull().default(""),
   data: jsonb("data").$type<{ blockId: number; number: number; text: string; answers: { number: number; text: string; correct: boolean }[] }[]>().notNull(),
+  blocks: jsonb("blocks").$type<{ blockId: number; title: string; description: string }[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [index("bank_backups_created_idx").on(t.createdAt)]);
 

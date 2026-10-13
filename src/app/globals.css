@@ -24,3 +24,10 @@
 .pwa-install>span{font-size:13px;color:var(--navy);font-weight:600}
 .pwa-install .button{padding:7px 12px;font-size:13px}
 @media (max-width:560px){.pwa-install{left:16px;right:16px;bottom:12px;flex-wrap:wrap;justify-content:center;text-align:center}}
+
+.bulk-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0 0;padding:10px 12px;background:var(--pale);border:1px solid #cfdef5;border-radius:12px}
+.bulk-count{font-size:13px;color:var(--navy)}
+.bulk-spacer{flex:1 1 auto}
+.select-col{width:36px;text-align:center}
+.select-col input{width:16px;height:16px;accent-color:var(--blue);cursor:pointer}
+tr.row-selected{background:#f2f7ff}
