@@ -31,3 +31,14 @@
 .select-col{width:36px;text-align:center}
 .select-col input{width:16px;height:16px;accent-color:var(--blue);cursor:pointer}
 tr.row-selected{background:#f2f7ff}
+
+.time-toast{position:fixed;z-index:80;left:0;right:0;bottom:26px;margin:0 auto;width:fit-content;max-width:calc(100vw - 32px);display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #f0d7c9;box-shadow:0 18px 50px #172c4c2e;border-radius:10px;padding:14px 16px;animation:toast-in .25s ease-out}
+.time-toast>svg{color:#c98a5b;flex-shrink:0}
+.time-toast>div{display:flex;flex-direction:column;gap:3px}
+.time-toast strong{font-size:12px;color:#5c4a3a}
+.time-toast span{font-size:10px;color:#9b8b7c}
+.time-toast>button{margin-left:auto;background:transparent;border:0;color:#b6a99c;display:flex;padding:4px;cursor:pointer}
+.time-toast>button:hover{color:#8d7c6c}
+.timer.urgent{animation:timer-pulse 1.1s ease-in-out infinite}
+@keyframes toast-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes timer-pulse{0%,100%{box-shadow:0 0 0 0 #ba655b00}50%{box-shadow:0 0 0 4px #ba655b24}}
