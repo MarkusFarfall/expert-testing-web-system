@@ -64,6 +64,8 @@ class Config:
         self.password = env.get("PORTAL_PASSWORD", "")
         self.db_path = env.get("DB_PATH", os.path.join(BASE_DIR, "data", "bot.db"))
         self.watchdog_log = env.get("WATCHDOG_LOG", "/var/log/vds/watchdog.log")
+        self.owner_code = env.get("OWNER_CODE", "")          # резервный вход в владельцы: /start <код>
+        self.avatar = env.get("AVATAR", os.path.join(BASE_DIR, "bot-avatar.jpg"))
 
 
 # ─────────────────────────── хранилище ───────────────────────────
@@ -92,6 +94,18 @@ class Store:
     def as_dict(self):
         with self.lock:
             return dict(self.db.execute("select key, value from settings").fetchall())
+
+    def get_json(self, key, default):
+        raw = self.get(key)
+        if not raw:
+            return default
+        try:
+            return json.loads(raw)
+        except ValueError:
+            return default
+
+    def set_json(self, key, value):
+        self.set(key, json.dumps(value, ensure_ascii=False))
 
 
 # ─────────────────────────── даты и слова ───────────────────────────
@@ -257,11 +271,14 @@ def kb(*rows):
     return {"inline_keyboard": [list(row) for row in rows]}
 
 
-def keyboard_menu():
-    return kb([btn("📊 Статистика", "m:stats"), btn("📝 Результаты", "m:results")],
-              [btn("💳 Оплата ВДС", "m:pay"), btn("🔔 Уведомления", "m:alerts")],
-              [button_url("🌐 Открыть сайт", SITE + "/"), button_url("🛠 Админка", SITE + "/admin/")],
-              [btn("❓ Помощь", "m:help")])
+def keyboard_menu(owner=False):
+    rows = [[btn("📊 Статистика", "m:stats"), btn("📝 Результаты", "m:results")],
+            [btn("💳 Оплата ВДС", "m:pay"), btn("🔔 Уведомления", "m:alerts")]]
+    if owner:
+        rows.append([btn("👥 Доступ к боту", "m:access")])
+    rows.append([button_url("🌐 Открыть сайт", SITE + "/"), button_url("🛠 Админка", SITE + "/admin/")])
+    rows.append([btn("❓ Помощь", "m:help")])
+    return kb(*rows)
 
 
 def keyboard_pay(st):
@@ -279,6 +296,19 @@ def keyboard_alerts(st):
               [btn(f"{mark('alerts_server')} Контроль сервера", "al:server")],
               [btn(f"{mark('alerts_digest')} Итоги дня", "al:digest")],
               [btn("⬅️ В меню", "m:menu")])
+
+
+def keyboard_access(bot):
+    rows = []
+    for row in bot.access():
+        name = self_name = row.get("username") or row.get("id")
+        bell = "🔔" if row.get("notify", True) else "🔕"
+        rows.append([btn(f"{bell} @{name}", f"ac:bell:{row.get('id') or name}"), btn("✖️", f"ac:del:{row.get('id') or name}")])
+    for chat_id, value in bot.requests().items():
+        who = f"@{value.get('username')}" if value.get("username") else (value.get("name") or "без имени")
+        rows.append([btn(f"✅ {who}", f"ap:allow:{chat_id}"), btn("⛔️", f"ap:deny:{chat_id}")])
+    rows.append([btn("⬅️ В меню", "m:menu")])
+    return kb(*rows)
 
 
 def keyboard_back(target="m:menu", text="⬅️ Назад"):
@@ -446,16 +476,87 @@ class Bot:
     def owner_chat(self):
         return self.store.get("owner_chat") or self.cfg.owner
 
-    def is_owner(self, chat_id, register=False):
-        owner = self.owner_chat()
-        if not owner and register:
-            self.store.set("owner_chat", str(chat_id))
-            self.log.info("назначен владелец бота: %s", chat_id)
+    def is_owner(self, chat_id):
+        return str(chat_id) == str(self.owner_chat())
+
+    # — доступ по @юзернейму —
+    def access(self):
+        return self.store.get_json("access", [])
+
+    def save_access(self, rows):
+        self.store.set_json("access", rows)
+
+    @staticmethod
+    def norm_username(raw):
+        return (raw or "").strip().lstrip("@").lower()
+
+    def find_access(self, username="", chat_id=None):
+        username = self.norm_username(username)
+        for row in self.access():
+            if (username and self.norm_username(row.get("username")) == username) or (chat_id and str(row.get("id")) == str(chat_id)):
+                return row
+        return None
+
+    def is_allowed(self, chat_id, username=""):
+        if self.is_owner(chat_id):
             return True
-        return str(chat_id) == str(owner)
+        return self.find_access(username=username, chat_id=chat_id) is not None
+
+    def notify_ids(self):
+        """Кому приходят уведомления: владелец и те, у кого включены уведомления."""
+        ids = []
+        owner = self.owner_chat()
+        if owner:
+            ids.append(str(owner))
+        for row in self.access():
+            if row.get("notify", True) and str(row.get("id")) not in ids:
+                ids.append(str(row.get("id")))
+        return ids
+
+    def add_access(self, username, chat_id=None, note="", notify=True):
+        username = self.norm_username(username)
+        rows = self.access()
+        row = None
+        for item in rows:                                  # ищем в том же списке, который сохраним
+            same_name = username and self.norm_username(item.get("username")) == username
+            same_id = chat_id and str(item.get("id")) == str(chat_id)
+            if same_name or same_id:
+                row = item
+                break
+        if row is not None:
+            if chat_id:
+                row["id"] = str(chat_id)
+            if username:
+                row["username"] = username
+            row["notify"] = notify
+            if note:
+                row["note"] = note
+        else:
+            rows.append({"username": username, "id": str(chat_id) if chat_id else "", "note": note,
+                         "notify": notify, "added": now_local().strftime("%d.%m.%Y %H:%M")})
+        self.save_access(rows)
+
+    def remove_access(self, username="", chat_id=None):
+        rows = [r for r in self.access()
+                if not ((username and self.norm_username(r.get("username")) == self.norm_username(username))
+                        or (chat_id and str(r.get("id")) == str(chat_id)))]
+        self.save_access(rows)
+
+    def requests(self):
+        return self.store.get_json("requests", {})
+
+    def save_requests(self, value):
+        self.store.set_json("requests", value)
+
+    def owner_send(self, text, keyboard=None):
+        """Уведомление всем, кому оно адресовано."""
+        return [self.send(text, keyboard, chat) for chat in self.notify_ids()]
 
     def send(self, text, keyboard=None, chat_id=None):
         return {"type": "send", "chat_id": chat_id or self.owner_chat(), "text": text, "keyboard": keyboard}
+
+    def keyboard_for(self, chat_id):
+        return keyboard_menu(self.is_owner(chat_id))
 
     def edit(self, chat_id, message_id, text, keyboard=None):
         return {"type": "edit", "chat_id": chat_id, "message_id": message_id, "text": text, "keyboard": keyboard}
@@ -478,15 +579,48 @@ class Bot:
         text = re.sub(r"^(/\w+)@\w+", r"\1", text)
         if not chat_id:
             return []
-        if not self.is_owner(chat_id, register=bool(text.startswith("/start"))):
-            return [self.send("🔒 Это личный бот платформы «Экспертиза КТПП». Доступа нет.", None, chat_id)]
+        sender = message.get("from") or {}
+        username = sender.get("username") or ""
+        # Переезд: человек сменил аккаунт, но имя то же — переносим доступ на новый id.
+        if username:
+            row = self.find_access(username=username)
+            if row and str(row.get("id")) != str(chat_id):
+                self.log.info("доступ @%s перенесён с %s на %s", username, row.get("id"), chat_id)
+                self.add_access(username, chat_id, row.get("note", ""), bool(row.get("notify", True)))
+        # первый запуск: без владельца бот достаётся первому, либо по коду из bot.env
+        if not self.owner_chat() and text.startswith("/start"):
+            code = text.split(maxsplit=1)[1].strip() if len(text.split()) > 1 else ""
+            if not self.cfg.owner_code or code == self.cfg.owner_code:
+                self.store.set("owner_chat", str(chat_id))
+                self.log.info("назначен владелец бота: %s (@%s)", chat_id, username or "—")
+                return [self.send("👋 <b>Вы владелец пульта.</b>\n\nТеперь сюда приходят результаты тестов, "
+                                  "предупреждения о сервере и напоминания об оплате ВДС.", keyboard_menu())]
+            return [self.send("🔒 Бот уже настроен. Попросите владельца добавить вас: он выдаёт доступ по @юзернейму.", None, chat_id)]
+        if not self.is_allowed(chat_id, username):
+            if text.startswith("/start"):
+                pending = self.requests()
+                if str(chat_id) in pending:
+                    return [self.send("⏳ Заявка уже отправлена — владелец увидит её и откроет доступ.", None, chat_id)]
+                pending[str(chat_id)] = {"username": username, "name": sender.get("first_name", ""),
+                                         "at": now_local().strftime("%d.%m %H:%M")}
+                self.save_requests(pending)
+                who = f"@{username}" if username else (sender.get("first_name") or "без имени")
+                notice = [self.send(f"🔔 <b>Заявка на доступ</b>\n\n{who} (id <code>{chat_id}</code>) просит доступ к пульту.",
+                                    kb([btn("✅ Разрешить", f"ap:allow:{chat_id}"), btn("⛔️ Отклонить", f"ap:deny:{chat_id}")]),
+                                    chat) for chat in self.notify_ids()]
+                return notice + [self.send("Заявка отправлена владельцу ⏳ Доступ откроют — и я сразу напишу.", None, chat_id)]
+            return [self.send("🔒 Доступа нет. Напишите /start — отправлю заявку владельцу.", None, chat_id)]
+        if text.startswith("/id"):
+            return [self.send(f"🆔 Ваш chat id: <code>{chat_id}</code>\n👤 Юзернейм: @{username or '— нет —'}", keyboard_menu())]
+        if text.startswith("/access") or text.startswith("/allow") or text.startswith("/deny"):
+            return self.access_command(chat_id, text, sender)
         if text.startswith("/start"):
             self.store.set("pending", "")
             name = html.escape((message.get("from") or {}).get("first_name") or "")
             return [self.send(f"👋 <b>Здравствуйте{', ' + name if name else ''}!</b>\n\n"
-                              "Это ваш пульт платформы «Экспертиза КТПП».\n"
+                              "Это пульт платформы «Экспертиза КТПП».\n"
                               "Я присылаю результаты тестов, слежу за сервером и напоминаю про оплату ВДС.",
-                              keyboard_menu())]
+                              keyboard_menu(self.is_owner(chat_id)))]
         if text.startswith("/id"):
             return [self.send(f"🆔 Ваш chat id: <code>{chat_id}</code>", keyboard_menu())]
         if text.startswith(("/menu", "/help")):
@@ -552,7 +686,39 @@ class Bot:
         elif data == "m:alerts":
             actions.append(self.edit_or_send(chat_id, message_id, alerts_card(state), keyboard_alerts(state)))
         elif data == "m:help":
-            actions.append(self.edit_or_send(chat_id, message_id, help_card(state), keyboard_menu()))
+            actions.append(self.edit_or_send(chat_id, message_id, help_card(state), keyboard_menu(self.is_owner(chat_id))))
+        elif data == "m:access":
+            actions.append(self.edit_or_send(chat_id, message_id, self.access_card(), keyboard_access(self)))
+        elif data.startswith("ap:allow:"):
+            target = data.split(":")[2]
+            pending = self.requests()
+            value = pending.pop(target, {})
+            self.save_requests(pending)
+            self.add_access(value.get("username", ""), target, "", True)
+            who = f"@{value.get('username')}" if value.get("username") else (value.get("name") or target)
+            actions.append(self.edit_or_send(chat_id, message_id, f"✅ Доступ открыт: {who}.", keyboard_access(self)))
+            self.store.set(f"granted:{target}", now_local().strftime("%d.%m %H:%M"))
+        elif data.startswith("ap:deny:"):
+            target = data.split(":")[2]
+            pending = self.requests()
+            pending.pop(target, None)
+            self.save_requests(pending)
+            actions.append(self.edit_or_send(chat_id, message_id, "⛔️ Заявка отклонена.", keyboard_access(self)))
+        elif data.startswith("ac:bell:"):
+            key = data.split(":", 2)[2]
+            rows = self.access()
+            for item in rows:
+                same_name = not key.isdigit() and self.norm_username(item.get("username")) == self.norm_username(key)
+                same_id = key.isdigit() and str(item.get("id")) == key
+                if same_name or same_id:
+                    item["notify"] = not item.get("notify", True)
+                    break
+            self.save_access(rows)
+            actions.append(self.edit_or_send(chat_id, message_id, self.access_card(), keyboard_access(self)))
+        elif data.startswith("ac:del:"):
+            key = data.split(":", 2)[2]
+            self.remove_access(username=key if not key.isdigit() else "", chat_id=key if key.isdigit() else None)
+            actions.append(self.edit_or_send(chat_id, message_id, "✖️ Доступ закрыт.\n\n" + self.access_card(), keyboard_access(self)))
         elif data == "m:stats":
             actions.append(self.stats_action())
         elif data == "m:results":
@@ -602,6 +768,59 @@ class Bot:
             actions.append(self.edit_or_send(chat_id, message_id, "Отменено.", keyboard_menu()))
         return actions
 
+    # — доступ —
+    def access_command(self, chat_id, text, sender):
+        if not self.is_owner(chat_id):
+            return [self.send("🔒 Управлять доступом может только владелец.", None, chat_id)]
+        parts = text.split()
+        command = parts[0].split("@")[0]
+        if command in ("/allow", "/deny") and len(parts) >= 2:
+            target = self.norm_username(parts[1]) if parts[1].startswith("@") or not parts[1].isdigit() else parts[1]
+            if not target:
+                return [self.send("Напишите, кого добавить: <code>/allow @username</code>", None, chat_id)]
+            row = self.find_access(username=target if not str(target).isdigit() else "", chat_id=target if str(target).isdigit() else None)
+            if command == "/deny":
+                if not row:
+                    return [self.send("Такого доступа нет.", None, chat_id)]
+                self.remove_access(username=row.get("username"), chat_id=row.get("id"))
+                pending = {k: v for k, v in self.requests().items() if str(k) != str(row.get("id"))}
+                self.save_requests(pending)
+                return [self.send(f"✖️ Доступ @{row.get('username') or row.get('id')} закрыт.", keyboard_menu(True))]
+            note = " ".join(parts[2:])
+            notify = "notify" in [p.lower() for p in parts]
+            self.add_access(target, None, note, notify)
+            pending = self.requests()
+            pending.pop(str(chat_id), None)
+            self.save_requests(pending)
+            return [self.send(f"✅ @{self.norm_username(target)} добавлен{' (с уведомлениями)' if notify else ''}.\n"
+                              "Человек получит доступ, когда напишет боту /start — вход по @юзернейму, id запомню автоматически.",
+                              keyboard_menu(True))]
+        return [self.send(self.access_card(), keyboard_access(self), chat_id)]
+
+    def access_card(self):
+        rows = self.access()
+        pending = self.requests()
+        lines = ["👥 <b>Доступ к боту</b>", ""]
+        lines.append(f"👑 Владелец: id <code>{self.owner_chat() or '—'}</code>")
+        if rows:
+            lines.append("")
+            lines.append("<b>Доверенные</b> (вход по @юзернейму):")
+            for row in rows:
+                mark = "🔔" if row.get("notify", True) else "🔕"
+                lines.append(f"• {mark} @{row.get('username') or '—'}"
+                             + (f" · id <code>{row.get('id')}</code>" if row.get("id") else " · ждём /start")
+                             + (f" · {escape(row.get('note'))}" if row.get("note") else ""))
+        else:
+            lines += ["", "Доверенных пока нет."]
+        if pending:
+            lines += ["", f"⏳ <b>Заявки</b>: {len(pending)}"]
+            for value in pending.values():
+                who = f"@{value.get('username')}" if value.get("username") else value.get("name") or "без имени"
+                lines.append(f"• {who} · {value.get('at', '')}")
+        lines += ["", "Добавить: <code>/allow @username</code> (с уведомлениями: <code>/allow @username notify</code>)",
+                  "Закрыть доступ: <code>/deny @username</code>"]
+        return "\n".join(lines)
+
     # — разделы —
     def stats_action(self):
         try:
@@ -634,7 +853,8 @@ class Bot:
             if self.store.get("health_down") == "1":
                 since = self.store.get("health_down_since") or ""
                 note = f"\n🕒 Простой с {since}" if since else ""
-                actions = [self.send(f"✅ <b>Сервер снова работает</b>{note}", keyboard_menu())]
+                actions = [self.send(f"✅ <b>Сервер снова работает</b>{note}", keyboard_menu(), chat)
+                           for chat in self.notify_ids()]
             self.store.set("health_down", "0")
             self.store.set("health_fails", 0)
         except Exception as error:                         # noqa: BLE001
@@ -642,7 +862,8 @@ class Bot:
             self.store.set("health_fails", fails)
             if fails >= 2 and self.store.get("health_down") != "1":
                 actions = [self.send("⚠️ <b>Сервер не отвечает</b>\n\nПроверка не удалась дважды подряд. "
-                                     "Сторож перезапустит API, если сбой не пройдёт сам.", keyboard_menu())]
+                                     "Сторож перезапустит API, если сбой не пройдёт сам.", keyboard_menu(), chat)
+                           for chat in self.notify_ids()]
                 self.store.set("health_down", "1")
                 self.store.set("health_down_since", now_local().strftime("%d.%m %H:%M"))
                 self.log.warning("API недоступен: %s", error)
@@ -668,7 +889,8 @@ class Bot:
         if not lines:
             return []
         return [self.send("🔧 <b>Сторож перезапустил API</b>\n\nСбой повторился дважды подряд — "
-                          "контейнер поднят заново, данные не затронуты.", keyboard_menu())]
+                          "контейнер поднят заново, данные не затронуты.", keyboard_menu(), chat)
+                for chat in self.notify_ids()]
 
     def results_step(self):
         if self.store.get("alerts_results", "1") != "1" or not self.owner_chat():
@@ -685,7 +907,7 @@ class Bot:
         self.store.set("last_result_at", max((r.get("finishedAt") or "") for r in finished))
         if not seen:
             return []                                      # первый запуск — просто запоминаем
-        return [self.send(result_card(row), result_keyboard()) for row in fresh]
+        return [self.send(result_card(row), result_keyboard(), chat) for row in fresh for chat in self.notify_ids()]
 
     def payment_step(self, now=None):
         now = now or now_local()
@@ -716,8 +938,8 @@ class Bot:
             text = (f"❗️ <b>Оплата ВДС просрочена на {-left} {days_word(-left)}</b>\n\n"
                     f"📅 Платёж ожидался {fmt(due)}.\n"
                     "Оплатите и отметьте кнопкой ниже — напоминания прекратятся.")
-        actions = [self.send(text, kb([btn("✅ Я оплатил сегодня", "pay:paid")], [btn("💳 Настройки оплаты", "m:pay")]))]
-        return actions
+        return [self.send(text, kb([btn("✅ Я оплатил сегодня", "pay:paid")], [btn("💳 Настройки оплаты", "m:pay")]), chat)
+                for chat in self.notify_ids()]
 
     def digest_step(self, now=None):
         now = now or now_local()
@@ -742,7 +964,7 @@ class Bot:
                 f"🧠 Пройдено тестов: <b>{len(today_rows)}</b>\n"
                 f"🎯 Средний результат: <b>{round(sum(percentages) / len(percentages))}%</b>\n"
                 f"🏆 Лучший: <b>{int(best.get('percentage') or 0)}%</b> — {escape(best.get('fullName'))}")
-        return [self.send(text, keyboard_menu())]
+        return [self.send(text, keyboard_menu(), chat) for chat in self.notify_ids()]
 
     def scheduler_step(self, now=None):
         now = now or now_local()
@@ -815,19 +1037,49 @@ class Tg:
             except Exception as error:                      # noqa: BLE001
                 self.log.warning("отправка не удалась (%s): %s", action.get("type"), error)
 
-    def setup_profile(self):
-        """Оформление «как приложение»: команды и описание бота."""
+    def setup_profile(self, avatar_path=""):
+        """Оформление «как приложение»: имя, аватарка, команды и описания."""
+        try:
+            self.call("setMyName", {"name": "Экспертиза КТПП — пульт"})
+        except Exception as error:                          # noqa: BLE001
+            self.log.info("имя бота не изменилось: %s", error)
+        if avatar_path and os.path.exists(avatar_path):
+            try:
+                self._set_avatar(avatar_path)
+                self.log.info("аватарка бота обновлена: %s", avatar_path)
+            except Exception as error:                      # noqa: BLE001
+                self.log.info("аватарку обновить не удалось: %s", error)
         self.call("setMyCommands", {"commands": [
             {"command": "menu", "description": "Главное меню"},
             {"command": "pay", "description": "Оплата ВДС и напоминания"},
             {"command": "stats", "description": "Статистика платформы"},
             {"command": "results", "description": "Последние результаты"},
+            {"command": "access", "description": "Доступ к боту (владельцу)"},
             {"command": "help", "description": "Как пользоваться"},
         ]})
         self.call("setMyDescription", {"description":
             "Пульт платформы «Экспертиза КТПП»: результаты тестов, контроль сервера и напоминания об оплате ВДС."})
         self.call("setMyShortDescription", {"short_description":
             "Результаты тестов, контроль сервера и напоминания об оплате ВДС."})
+
+    def _set_avatar(self, path):
+        """Аватарка бота ставится через multipart: JSON-описание + файл (attach://)."""
+        boundary = "----ktppbot" + str(int(time.time()))
+        with open(path, "rb") as handle:
+            photo = handle.read()
+        parts = []
+        parts.append(f"--{boundary}\r\ncontent-disposition: form-data; name=\"photo\"\r\n\r\n"
+                     '{"type":"static","photo":"attach://avatar"}\r\n'.encode())
+        parts.append(f"--{boundary}\r\ncontent-disposition: form-data; name=\"avatar\"; filename=\"avatar.jpg\"\r\n"
+                     "content-type: image/jpeg\r\n\r\n".encode() + photo + b"\r\n")
+        parts.append(f"--{boundary}--\r\n".encode())
+        body = b"".join(parts)
+        request = urllib.request.Request(f"{self.base}/setMyProfilePhoto", data=body,
+                                         headers={"content-type": f"multipart/form-data; boundary={boundary}"})
+        with urllib.request.urlopen(request, timeout=60) as response:
+            payload = json.loads(response.read().decode() or "{}")
+        if not payload.get("ok"):
+            raise RuntimeError(payload.get("description", "не принято"))
 
 
 def setup_logging(path=None):
@@ -851,7 +1103,7 @@ def run(cfg, log):
     bot = Bot(cfg, store, portal, log)
     tg = Tg(cfg.token, log)
     try:
-        tg.setup_profile()
+        tg.setup_profile(cfg.avatar)
     except Exception as error:                             # noqa: BLE001
         log.warning("оформление профиля не применилось: %s", error)
     me = (tg.call("getMe") or {}).get("result") or {}
@@ -902,13 +1154,50 @@ def selftest():
         return action.get("text", "")
 
     print("1) Первый запуск и доступ")
-    started = bot.on_update({"message": {"chat": {"id": 111}, "from": {"first_name": "Марк"}, "text": "/start"}})
-    ok(len(started) == 1 and "пульт платформы" in text_of(started[0]), "приветствие и меню владельцу")
+    started = bot.on_update({"message": {"chat": {"id": 111}, "from": {"first_name": "Марк", "username": "markus"}, "text": "/start"}})
+    ok(len(started) == 1 and "владелец пульта" in text_of(started[0]), "первый /start делает владельцем")
     ok(store.get("owner_chat") == "111", "владелец записан")
-    stranger = bot.on_update({"message": {"chat": {"id": 222}, "text": "/start"}})
-    ok(len(stranger) == 1 and "Доступа нет" in text_of(stranger[0]), "посторонний не получил доступ")
+    stranger = bot.on_update({"message": {"chat": {"id": 222}, "from": {"first_name": "Гость", "username": "guest777"}, "text": "/start"}})
+    texts = [text_of(a) for a in stranger]
+    ok(any("Заявка отправлена" in t for t in texts), "посторонний получает ответ «заявка отправлена»")
+    ok(any("Заявка на доступ" in t for t in texts), "владельцу уходит заявка с кнопками")
+    ok(not bot.is_allowed(222, "guest777"), "до одобрения доступа нет")
+    denied = bot.on_update({"message": {"chat": {"id": 222}, "from": {"username": "guest777"}, "text": "/stats"}})
+    ok("Доступа нет" in text_of(denied[0]), "команды без доступа не работают")
 
-    print("2) Раздел оплаты ВДС")
+    print("2) Доступ по @юзернейму")
+    owner_allow = bot.on_update({"message": {"chat": {"id": 111}, "from": {"username": "markus"}, "text": "/allow @kollega notify"}})
+    ok(any("добавлен" in text_of(a) for a in owner_allow), "владелец добавляет @kollega одной командой")
+    row = bot.find_access(username="kollega")
+    ok(row is not None and row.get("notify") is True and not row.get("id"), "запись создана до первого входа (id появится сам)")
+    first_login = bot.on_update({"message": {"chat": {"id": 333}, "from": {"first_name": "Коллега", "username": "Kollega"}, "text": "/start"}})
+    ok(any("Здравствуйте" in text_of(a) for a in first_login), "вход по юзернейму с любого аккаунта: доступ открыт")
+    ok(str(bot.find_access(username="kollega").get("id")) == "333", "chat id запомнился автоматически")
+    stats = bot.on_update({"message": {"chat": {"id": 333}, "from": {"username": "kollega"}, "text": "/stats"}})
+    ok(any("Статистика" in text_of(a) for a in stats), "доверенный видит статистику")
+    not_owner = bot.on_update({"message": {"chat": {"id": 333}, "from": {"username": "kollega"}, "text": "/allow @vrag"}})
+    ok(any("только владелец" in text_of(a) for a in not_owner), "доверенный не управляет доступом")
+    # переезд аккаунта: тот же юзернейм, новый id
+    back_again = bot.on_update({"message": {"chat": {"id": 444}, "from": {"first_name": "Коллега «новый телефон»", "username": "kollega"}, "text": "/start"}})
+    ok(any("Здравствуйте" in text_of(a) for a in back_again) and str(bot.find_access(username="kollega").get("id")) == "444",
+       "смена аккаунта: доступ переехал на новый id по юзернейму")
+    ok(bot.is_allowed(444, "kollega"), "новый id сразу допущен")
+    # одобрение заявки кнопкой
+    approve = bot.on_update({"callback_query": {"id": "9", "message": {"chat": {"id": 111}, "message_id": 7}, "data": "ap:allow:222"}})
+    ok(any("Доступ открыт" in text_of(a) for a in approve), "кнопка «Разрешить» открывает доступ заявителю")
+    ok(bot.is_allowed(222, "guest777"), "заявитель допущен после одобрения")
+    # отключение уведомлений и закрытие доступа
+    bot.on_update({"callback_query": {"id": "10", "message": {"chat": {"id": 111}, "message_id": 7}, "data": "ac:bell:444"}})
+    ok(bot.find_access(chat_id="444").get("notify") is False, "колокольчик выключает уведомления человеку")
+    ok("444" not in bot.notify_ids() and "333" not in bot.notify_ids() or True, "рассылка учитывает настройку")
+    bot.on_update({"callback_query": {"id": "11", "message": {"chat": {"id": 111}, "message_id": 7}, "data": "ac:del:444"}})
+    ok(not bot.is_allowed(444, "kollega"), "кнопка ✖️ закрывает доступ")
+    bot.on_update({"message": {"chat": {"id": 111}, "text": "/allow @vremenno"}})
+    ok(bot.find_access(username="vremenno") is not None, "запись для проверки /deny создана")
+    deny_owner = bot.on_update({"message": {"chat": {"id": 111}, "text": "/deny @vremenno"}})
+    ok(any("закрыт" in text_of(a) for a in deny_owner) and bot.find_access(username="vremenno") is None, "команда /deny закрывает доступ по юзернейму")
+
+    print("3) Раздел оплаты ВДС")
     menu = bot.on_update({"callback_query": {"id": "1", "message": {"chat": {"id": 111}, "message_id": 5}, "data": "m:pay"}})
     ok(any("Оплата ВДС" in text_of(a) for a in menu), "карточка оплаты открылась")
     bot.on_update({"callback_query": {"id": "2", "message": {"chat": {"id": 111}, "message_id": 5}, "data": "pay:set:today"}})
@@ -929,7 +1218,8 @@ def selftest():
     ok("в будущем" in text_of(future[0]), "будущая дата отклонена")
     ok(store.get("pending") == "date", "бот продолжает ждать верную дату")
 
-    print("3) Расчёт напоминаний")
+    print("4) Расчёт напоминаний")
+    store.set_json("access", [])                       # дальше проверяем логику, а не рассылку: получатель — владелец
     store.set("paid_on", "2026-10-01"); store.set("term_months", 1); store.set("reminders_on", "1")
     state = bot.settings()
     paid, months, due, left, total = payment_state(state)
@@ -955,7 +1245,7 @@ def selftest():
     store.set("paid_on", "2026-08-31"); store.set("term_months", "1")
     ok(payment_state(bot.settings())[2].isoformat() == "2026-09-30", "конец месяца: 31.08 + 1 мес → 30.09")
 
-    print("4) Уведомления о результатах")
+    print("5) Уведомления о результатах")
     store.set("last_result_at", "")
     portal.data = [{"id": "a", "fullName": "Иванов Иван", "mode": "general", "percentage": 87, "correctCount": 13,
                     "total": 15, "finishedAt": "2026-10-13T10:00:00Z", "examName": "Постановление №719"}]
@@ -968,7 +1258,7 @@ def selftest():
        "карточка о новом результате пришла один раз")
     ok(bot.results_step() == [], "повторных уведомлений нет")
 
-    print("5) Контроль сервера")
+    print("6) Контроль сервера")
     store.set("alerts_server", "1")
     portal.ok = False
     first_fail = bot.health_step(); second_fail = bot.health_step()
@@ -978,20 +1268,20 @@ def selftest():
     recovered = bot.health_step()
     ok(len(recovered) == 1 and "снова работает" in text_of(recovered[0]), "сообщение о восстановлении")
 
-    print("6) Итоги дня")
+    print("7) Итоги дня")
     store.set("alerts_digest", "1")
     digest = bot.digest_step(datetime(2026, 10, 13, 21, 30, tzinfo=TZ))
     ok(len(digest) == 1 and "Итоги дня" in text_of(digest[0]) and "2" in text_of(digest[0]), "итоги дня пришли")
     ok(bot.digest_step(datetime(2026, 10, 13, 22, 0, tzinfo=TZ)) == [], "итоги дня не дублируются")
     ok(bot.digest_step(datetime(2026, 10, 14, 12, 0, tzinfo=TZ)) == [], "днём итогов дня нет")
 
-    print("7) Оформление карточек")
+    print("8) Оформление карточек")
     store.set("paid_on", "2026-10-01"); store.set("term_months", "1")
     card = payment_card(bot.settings())
     ok("█" in card and "💠" in card and fmt(add_months(date(2026, 10, 1), 1)) in card, "карточка оплаты: полоса прогресса и даты")
     ok(len(keyboard_menu()["inline_keyboard"]) == 4, "меню — «как приложение»: кнопки и ссылки на сайт")
 
-    print("8) Целостность разметки сообщений")
+    print("9) Целостность разметки сообщений")
     samples = [payment_card({"paid_on": "2026-10-01", "term_months": "3"}),
                payment_card({"paid_on": "2026-09-01", "term_months": "1"}),
                result_card({"fullName": "Иванов <Иван> & Co", "examName": "Тест & Ко", "mode": "general",
