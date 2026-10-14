@@ -36,7 +36,7 @@ export async function makePdf(title: string, subtitle: string, paragraphs: strin
   function header() {
     page.drawRectangle({ x: 0, y: 780, width: 596, height: 62, color: blue });
     page.drawText("КТПП  /  ЭКСПЕРТИЗА", { x: 42, y: 806, font: font as PDFFont, size: 15, color: rgb(1, 1, 1) });
-    page.drawText("Калининградская торгово-промышленная палата", { x: 42, y: 788, font: font as PDFFont, size: 8, color: rgb(0.82, 0.89, 1) });
+    page.drawText("Союз «Калининградская торгово-промышленная палата»", { x: 42, y: 788, font: font as PDFFont, size: 8, color: rgb(0.82, 0.89, 1) });
     y = 748;
   }
   function line(text: string, size: number, color = grey) {

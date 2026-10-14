@@ -69,3 +69,13 @@ tr.row-selected{background:#f2f7ff}
   .admin-question-text{min-width:230px;max-width:none}
   td,th{padding-left:12px;padding-right:12px}
 }
+
+/* Длинная подпись кнопки («Ответить на оставшиеся (N)») переносится, а не вылезает за карточку */
+.test-question-actions{flex-wrap:wrap;gap:10px}
+.test-question-actions .button{white-space:normal;line-height:1.35;min-width:0;text-align:center}
+.modal-actions .button{white-space:normal;line-height:1.35}
+/* На телефоне кнопки навигации — во всю ширину, друг под другом */
+@media (max-width:760px){
+  .test-question-actions{flex-direction:column;align-items:stretch}
+  .test-question-actions .button{width:100%;justify-content:center}
+}
