@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Нет соединения — Экспертиза КТПП</title>
+<style>
+  :root { --blue:#2454a4; --navy:#1c2f4e; --text:#34445c; --muted:#7a8596; --surface:#f5f7fb; --border:#e3e8f0; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--surface); color:var(--text);
+         font-family: Golos, "Segoe UI", Arial, sans-serif; font-size:15px; line-height:1.5; padding:20px; }
+  main { max-width:440px; width:100%; background:#fff; border:1px solid var(--border); border-radius:18px; padding:34px 28px; text-align:center;
+         box-shadow:0 18px 45px rgba(28,47,78,.08); }
+  .icon { width:64px; height:64px; margin:0 auto 18px; border-radius:18px; background:#edf3fc; display:flex; align-items:center; justify-content:center; }
+  h1 { margin:0 0 10px; font-size:20px; color:var(--navy); }
+  p { margin:0 0 6px; }
+  .hint { color:var(--muted); font-size:13px; margin-top:10px; }
+  button { margin-top:20px; width:100%; border:0; border-radius:12px; background:var(--blue); color:#fff; font:inherit; font-weight:600;
+           padding:13px 18px; cursor:pointer; }
+  button:active { background:#1d4387; }
+</style>
+</head>
+<body>
+<main>
+  <div class="icon">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#2454a4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 3v12m-3 6h6m-8-2h10"/><path d="M5 7c4 0 6-3 7-4 1 1 3 4 7 4"/>
+    </svg>
+  </div>
+  <h1>Нет соединения</h1>
+  <p>Приложение открылось, но интернет недоступен — без связи вопросы и результаты не загрузить.</p>
+  <p class="hint">Проверьте подключение и нажмите кнопку ниже. Всё, что вы уже ответили и сохранили на сервере, не потеряется.</p>
+  <button onclick="location.reload()">Попробовать снова</button>
+</main>
+</body>
+</html>

@@ -1,0 +1,32 @@
+1:"$Sreact.fragment"
+2:"/expert-testing-web-system/_next/static/chunks/0umf92h1sb77c.js"
+3:"/expert-testing-web-system/_next/static/chunks/1s13dhsy4qas6.js"
+4:I[33204,["$2","$3"],"Shell"]
+5:I[39756,["$2","$3"],"default"]
+6:"/expert-testing-web-system/_next/static/chunks/023kd824jypox.js"
+7:I[58298,["$2","$3","$6"],"default"]
+8:I[37457,["$2","$3"],"default"]
+9:"/expert-testing-web-system/_next/static/chunks/2jd5ws195sklt.js"
+a:I[38286,["$2","$3","$9"],"EmptyState"]
+b:I[5014,["$2","$3","$9"],"default"]
+c:I[61661,["$2","$3"],"PwaRegister"]
+10:"$Sreact.suspense"
+11:"/expert-testing-web-system/_next/static/chunks/3zv2kp2dd141j.js"
+12:"/expert-testing-web-system/_next/static/chunks/1uccl96ner06e.js"
+13:I[65256,["$2","$3","$11","$12"],"QuestionBank"]
+14:I[97367,["$2","$3"],"OutletBoundary"]
+16:"ViewportBoundary"
+17:I[97367,["$2","$3"],"$16"]
+19:"MetadataBoundary"
+1a:I[97367,["$2","$3"],"$19"]
+1c:I[68027,["$2","$3"],"default",1]
+:HL["/expert-testing-web-system/_next/static/chunks/0rw1754r6puxb.css","style"]
+e:X
+f:[["children",{"s":"__PAGE__","h":512,"d":{"r":["$","$1","c",{"children":[["$","$10",null,{"children":["$","$L13",null,{}]}],[["$","script","script-0",{"src":"/expert-testing-web-system/_next/static/chunks/3zv2kp2dd141j.js","async":true,"nonce":"$undefined"}],["$","script","script-1",{"src":"/expert-testing-web-system/_next/static/chunks/1uccl96ner06e.js","async":true,"nonce":"$undefined"}]],["$","$L14",null,{"children":["$","$10",null,{"name":"Next.MetadataOutlet","children":"$@15"}]}]]}],"p":false,"v":null}}]]
+d:[["children",{"s":"questions","h":512,"d":{"r":["$","$1","c",{"children":[null,["$","$L5",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L8",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}],"p":false,"v":"$e"},"c":"$Qf"}]]
+0:{"P":null,"c":["","questions",""],"q":"","i":false,"t":{"t":{"s":"","h":528,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/expert-testing-web-system/_next/static/chunks/0rw1754r6puxb.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}],["$","script","script-0",{"src":"/expert-testing-web-system/_next/static/chunks/0umf92h1sb77c.js","async":true,"nonce":"$undefined"}],["$","script","script-1",{"src":"/expert-testing-web-system/_next/static/chunks/1s13dhsy4qas6.js","async":true,"nonce":"$undefined"}]],["$","html",null,{"lang":"ru","children":[["$","head",null,{"children":[["$","link",null,{"rel":"preconnect","href":"https://212.193.5.193","crossOrigin":"anonymous"}],["$","link",null,{"rel":"dns-prefetch","href":"https://212.193.5.193"}],["$","link",null,{"rel":"manifest","href":"/expert-testing-web-system/manifest.webmanifest"}],["$","meta",null,{"name":"theme-color","content":"#2454a4"}],["$","meta",null,{"name":"mobile-web-app-capable","content":"yes"}],["$","meta",null,{"name":"apple-mobile-web-app-capable","content":"yes"}],["$","meta",null,{"name":"apple-mobile-web-app-status-bar-style","content":"default"}],["$","meta",null,{"name":"apple-mobile-web-app-title","content":"Экспертиза"}],["$","link",null,{"rel":"apple-touch-icon","href":"/expert-testing-web-system/icons/apple-touch-icon.png"}],["$","link",null,{"rel":"icon","href":"/expert-testing-web-system/icon.svg","type":"image/svg+xml"}],["$","style",null,{"dangerouslySetInnerHTML":{"__html":"@font-face{font-family:Golos;src:url('/expert-testing-web-system/fonts/Golos.ttf') format('truetype');font-style:normal;font-weight:100 900;font-display:swap}"}}]]}],["$","body",null,{"children":[["$","$L4",null,{"children":["$","$L5",null,{"parallelRouterKey":"children","error":"$7","errorStyles":[],"errorScripts":[["$","script","script-0",{"src":"/expert-testing-web-system/_next/static/chunks/023kd824jypox.js","async":true,"nonce":"$undefined"}]],"template":["$","$L8",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","$La",null,{"icon":["$","$Lb",null,{"ref":"$undefined","icon":{"name":"file-question-mark","size":24,"node":[["path",{"d":"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z","key":"1oefj6"}],["path",{"d":"M12 17h.01","key":"p32p05"}],["path",{"d":"M9.1 9a3 3 0 0 1 5.82 1c0 2-3 3-3 3","key":"mhlwft"}]],"aliases":["file-question"]},"className":"$undefined","size":34}],"title":"Страница не найдена","text":"Возможно, адрес изменился или в ссылке есть опечатка. Вернитесь на главную страницу платформы.","action":{"href":"/","label":"На главную"}}],[]],"forbidden":"$undefined","unauthorized":"$undefined"}]}],["$","$Lc",null,{}]]}]]}]]}],"p":false,"v":null},"c":"$Qd"},"h":{"r":["$","$1","h",{"children":[null,["$","$L17",null,{"children":"$L18"}],["$","$L1a",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$10",null,{"name":"Next.Metadata","children":"$L1b"}]}],null]}],null]}],"p":false,"v":null}},"m":"$undefined","G":["$1c",[["$","link","0",{"rel":"stylesheet","href":"/expert-testing-web-system/_next/static/chunks/0rw1754r6puxb.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]]],"S":true,"r":"$undefined","s":"$undefined","a":"$undefined","l":"$undefined","p":"$undefined","d":"$undefined","b":"NNs9Ss44Z3OWNyB72TMbR"}
+e:C
+18:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
+1d:I[27201,["$2","$3"],"IconMark"]
+15:null
+1b:[["$","title","0",{"children":"Банк вопросов | Экспертиза КТПП"}],["$","meta","1",{"name":"description","content":"Платформа профессиональной подготовки и проверки знаний экспертов Союза «Калининградская торгово-промышленная палата». Тестирование без регистрации, единая база вопросов и разбор ошибок."}],["$","meta","2",{"name":"robots","content":"noindex, nofollow"}],["$","link","3",{"rel":"icon","href":"/expert-testing-web-system/icon.svg?icon.20ft24v0k0--t.svg","sizes":"any","type":"image/svg+xml"}],["$","$L1d","4",{}]]
