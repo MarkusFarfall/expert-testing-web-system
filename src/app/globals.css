@@ -54,7 +54,6 @@ tr.row-selected{background:#f2f7ff}
 .question-summary>div{min-width:0}
 .question-summary>svg{flex-shrink:0}
 .question-item,.question-list,.test-question-panel,.test-sidebar,.review-card,.review-answer,.result-content{min-width:0}
-.admin-question-text{min-width:0}
 .answer-hint{margin-top:18px;padding:11px 13px;border:1px solid #f0dfc4;background:#fdf8ef;color:#8a6d3f;border-radius:6px;font-size:10.5px;line-height:1.7}
 .navigator-note{margin-top:16px;font-size:9px;line-height:1.75;color:#9babc0}
 /* На телефоне длинные варианты читаются ровно, без «вылетов» текста */
@@ -63,4 +62,10 @@ tr.row-selected{background:#f2f7ff}
 /* На телефоне длинный текст в таблице админки не растягивает строку: 4 строки, полный — по нажатию на карандаш */
 @media (max-width:760px){
   .admin-question-text .table-name{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;white-space:normal}
+}
+
+/* Телефон: колонка с текстом вопроса остаётся широкой, таблица прокручивается вбок */
+@media (max-width:760px){
+  .admin-question-text{min-width:230px;max-width:none}
+  td,th{padding-left:12px;padding-right:12px}
 }
