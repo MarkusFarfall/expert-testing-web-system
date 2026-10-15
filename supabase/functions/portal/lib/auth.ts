@@ -31,20 +31,28 @@ export async function requireAdmin(token: string | null) {
 export async function adminStatus(token: string | null) {
   return { authenticated: await isAdmin(token), setupRequired: !Deno.env.get("ADMIN_PASSWORD") && !(await passwordSetting()) };
 }
-export async function login(password: string, setup: boolean, ip: string) {
+export async function login(password: string, setup: boolean, ip: string, setupToken = "") {
   if (!password || password.length > 256) throw new PortalError("Введите пароль.");
   const key = await hash(ip || "edge");
-  const [limit] = await db.select().from(authLimits).where(eq(authLimits.key, key));
-  if (limit && limit.resetAt > new Date() && limit.failures >= 10) throw new PortalError("Слишком много попыток входа. Повторите через 15 минут.", 429);
-  await db.insert(authLimits).values({ key, failures: 1, resetAt: new Date(Date.now() + 900000) })
-    .onConflictDoUpdate({ target: authLimits.key, set: { failures: (limit?.resetAt && limit.resetAt > new Date() ? limit.failures : 0) + 1, resetAt: new Date(Date.now() + 900000) } });
+  // Atomic increment and threshold: concurrent requests cannot overwrite each other's counts.
+  const [limit] = await db.insert(authLimits).values({ key, failures: 1, resetAt: new Date(Date.now() + 900000) })
+    .onConflictDoUpdate({ target: authLimits.key, set: {
+      failures: sql`case when ${authLimits.resetAt} <= now() then 1 else ${authLimits.failures} + 1 end`,
+      resetAt: sql`case when ${authLimits.resetAt} <= now() then now() + interval '15 minutes' else ${authLimits.resetAt} end`,
+    } }).returning({ failures: authLimits.failures });
+  if (limit.failures > 10) throw new PortalError("Слишком много попыток входа. Повторите через 15 минут.", 429);
   let encoded = await passwordSetting();
   if (!encoded && !Deno.env.get("ADMIN_PASSWORD")) {
     if (setup !== true) throw new PortalError("Сначала настройте доступ администратора.");
     if (password.length < 8) throw new PortalError("Используйте пароль не короче 8 символов.");
+    const expectedSetupToken = Deno.env.get("ADMIN_SETUP_TOKEN");
+    if (!expectedSetupToken || setupToken.length > 256 || !(await safeEqual(setupToken, expectedSetupToken))) {
+      throw new PortalError("Для первого входа нужен код настройки сервера. Обратитесь к владельцу.", 403);
+    }
     const salt = randomHex(16);
     encoded = `${salt}:${scryptHex(password, salt)}`;
-    await db.insert(settings).values({ key: "admin_password", value: encoded }).onConflictDoNothing();
+    const created = await db.insert(settings).values({ key: "admin_password", value: encoded }).onConflictDoNothing().returning({ key: settings.key });
+    if (!created.length) throw new PortalError("Доступ уже настроен. Войдите с установленным паролем.", 409);
   } else {
     let valid = false;
     const envPassword = Deno.env.get("ADMIN_PASSWORD");

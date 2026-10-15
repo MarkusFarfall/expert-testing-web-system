@@ -13,3 +13,11 @@ build/
 .idea/
 /playwright-report/
 /test-results/
+
+# Local bot credentials and generated state
+bot/bot.env
+bot/data/
+__pycache__/
+*.pyc
+# Review artifacts
+.artifacts/

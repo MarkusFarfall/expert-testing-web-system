@@ -16,7 +16,7 @@ export function PwaRegister() {
       else window.addEventListener("load", register, { once: true });
       // раз в час проверяем обновление сайта
       const timer = window.setInterval(() => navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => undefined), 3600000);
-      return () => window.clearInterval(timer);
+      return () => { window.clearInterval(timer); window.removeEventListener("load", register); };
     }
     return undefined;
   }, []);

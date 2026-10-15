@@ -32,6 +32,9 @@ export async function login(request: NextRequest, input: Record<string, unknown>
   if (!encoded && !process.env.ADMIN_PASSWORD) {
     if (input.setup !== true) throw new PortalError("Сначала настройте доступ администратора.");
     if (password.length < 8) throw new PortalError("Используйте пароль не короче 8 символов.");
+    const expected = process.env.ADMIN_SETUP_TOKEN;
+    const setupToken = typeof input.setupToken === "string" ? input.setupToken : "";
+    if (!expected || setupToken.length > 256 || !safeEqual(setupToken, expected)) throw new PortalError("Для первого входа нужен код настройки сервера.", 403);
     await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(82342)`);
       if ((await tx.select().from(settings).where(eq(settings.key, "admin_password"))).length) throw new PortalError("Доступ уже настроен. Войдите с установленным паролем.", 409);

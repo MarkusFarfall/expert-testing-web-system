@@ -1,3 +1,7 @@
+// Destructive integration checks: isolated database only, never the production DB.
+if (Deno.env.get("ALLOW_TEST_DB_WRITES") !== "yes") throw new Error("Set ALLOW_TEST_DB_WRITES=yes only for an isolated test database.");
+const testPassword = Deno.env.get("TEST_ADMIN_PASSWORD");
+if (!testPassword) throw new Error("TEST_ADMIN_PASSWORD is required.");
 const { handleRequest } = await import("./lib/router.ts");
 const visit = "99999999-8888-7777-6666-555555555555";
 const H = { "content-type": "application/json", "x-visitor-id": visit };
@@ -7,7 +11,7 @@ async function call(path: string, init: RequestInit = {}) {
   return { status: r.status, body: body as Record<string, unknown> };
 }
 // 1) админ
-const login = await call("admin/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "ktpp12390" }) });
+const login = await call("admin/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: testPassword }) });
 const token = login.body.token as string;
 const A = { ...H, "x-admin-token": token };
 console.log("1. вход админа:", login.status);

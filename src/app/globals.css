@@ -79,3 +79,23 @@ tr.row-selected{background:#f2f7ff}
   .test-question-actions{flex-direction:column;align-items:stretch}
   .test-question-actions .button{width:100%;justify-content:center}
 }
+
+/* Keep absolutely positioned accessible table labels inside the scroll container. */
+.table-wrap{position:relative;max-width:100%;min-width:0}
+.date-filter{min-width:0;max-width:100%}
+.filter-bar select,.field select{min-width:0;max-width:100%}
+@media(max-width:767px){
+  .stats-filter .date-filter{width:100%;gap:6px}
+  .stats-filter .date-filter input{flex:1;min-width:0;width:0}
+  .answer-choice>span{font-size:14px;line-height:1.65}
+  .test-question-panel h1{font-size:18px;line-height:1.5}
+  .question-summary h3{font-size:14px;line-height:1.6}
+  .button,.icon-button{min-height:42px}
+  .question-nav-button{min-height:40px}
+  .field label{font-size:12px}
+  .field small,.field-hint{font-size:11px}
+}
+@media(max-width:420px){
+  .admin-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .admin-metric:last-child:nth-child(odd){grid-column:1 / -1}
+}

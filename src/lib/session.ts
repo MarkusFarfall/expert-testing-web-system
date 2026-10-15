@@ -6,17 +6,31 @@ const ALTERNATES = (process.env.NEXT_PUBLIC_API_FALLBACKS ?? "https://212-193-5-
   .split(",").map((h) => h.trim().replace(/\/$/, "")).filter((h) => h && h !== PRIMARY);
 export const API_BASE = PRIMARY;
 export const API_FALLBACKS = ALTERNATES;
-export const API_ORIGIN = new URL(PRIMARY).origin;
+export const API_ORIGIN = new URL(PRIMARY, typeof window !== "undefined" ? window.location.origin : "https://preview.invalid").origin;
 
 export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const ADMIN_KEY = "ktpp_admin_token", VISITOR_KEY = "ktpp_visitor_id";
 
-export function getAdminToken() { try { return localStorage.getItem(ADMIN_KEY); } catch { return null; } }
-export function setAdminToken(token: string | null) { try { token ? localStorage.setItem(ADMIN_KEY, token) : localStorage.removeItem(ADMIN_KEY); } catch { /* приватный режим */ } }
+let memoryAdmin: string | null | undefined;
+let memoryVisitor: string | undefined;
+const uuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+export function getAdminToken() {
+  if (memoryAdmin !== undefined) return memoryAdmin;
+  try { return localStorage.getItem(ADMIN_KEY); } catch { return memoryAdmin ?? null; }
+}
+export function setAdminToken(token: string | null) {
+  memoryAdmin = token;
+  try { token ? localStorage.setItem(ADMIN_KEY, token) : localStorage.removeItem(ADMIN_KEY); } catch { /* session-only fallback */ }
+}
 export function getVisitorId() {
   try {
     let id = localStorage.getItem(VISITOR_KEY);
-    if (!id || !/^[\da-f-]{36}$/i.test(id)) { id = crypto.randomUUID(); localStorage.setItem(VISITOR_KEY, id); }
+    if (!id || !uuid.test(id)) {
+      id = memoryVisitor ?? crypto.randomUUID();
+      memoryVisitor = id;
+      localStorage.setItem(VISITOR_KEY, id);
+    }
+    memoryVisitor = id;
     return id;
-  } catch { return crypto.randomUUID(); }
+  } catch { return memoryVisitor ??= crypto.randomUUID(); }
 }

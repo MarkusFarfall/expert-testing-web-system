@@ -18,6 +18,8 @@ export async function importBankJson(input: Record<string, unknown>) {
   if (!qList.length) errors.push("Файл вопросов пуст.");
   if (qList.length > 10000) errors.push("Не более 10 000 вопросов за один импорт.");
   if (aList.length > 50000) errors.push("Не более 50 000 ответов за один импорт.");
+  const fail = () => { if (errors.length) throw new PortalError(`Импорт отменён: найдено проблем — ${errors.length}. База не изменена.`, 422, errors.slice(0, 150)); };
+  fail();
   const qIds = new Set<number>(), aIds = new Set<number>(), qOrder = new Set<string>(), aOrder = new Set<string>();
   for (const q of qList) {
     if (!positive(q?.id) || !positive(q?.blockId) || !positive(q?.number)) { errors.push("Некорректные номера или Id вопроса."); break; }
@@ -28,7 +30,9 @@ export async function importBankJson(input: Record<string, unknown>) {
     qOrder.add(order);
     if (typeof q.text !== "string" || !q.text.trim() || q.text.length > 10000) { errors.push(`Вопрос Id=${q.id}: текст 1–10 000 символов.`); break; }
   }
+  fail();
   const perQuestion = new Map<number, number>();
+  const answerCounts = new Map<number, number>();
   for (const a of aList) {
     if (!positive(a?.id) || !positive(a?.questionId) || !positive(a?.number)) { errors.push("Некорректные номера или Id ответа."); break; }
     if (aIds.has(a.id)) { errors.push(`Ответы: дубликат Id=${a.id}.`); break; }
@@ -38,10 +42,13 @@ export async function importBankJson(input: Record<string, unknown>) {
     if (aOrder.has(order)) { errors.push(`Вопрос Id=${a.questionId}: повторяется номер ответа ${a.number}.`); break; }
     aOrder.add(order);
     if (typeof a.text !== "string" || !a.text.trim() || a.text.length > 10000) { errors.push(`Ответ Id=${a.id}: текст 1–10 000 символов.`); break; }
+    if (typeof a.correct !== "boolean") { errors.push(`Ответ Id=${a.id}: correct должен быть true или false.`); break; }
+    answerCounts.set(a.questionId, (answerCounts.get(a.questionId) ?? 0) + 1);
     if (a.correct) perQuestion.set(a.questionId, (perQuestion.get(a.questionId) ?? 0) + 1);
   }
+  fail();
   for (const q of qList) {
-    const count = aList.filter((a) => a.questionId === q.id).length;
+    const count = answerCounts.get(q.id) ?? 0;
     if (count < 2) { errors.push(`Вопрос Id=${q.id}: нужно не менее двух ответов (найдено ${count}).`); break; }
     if ((perQuestion.get(q.id) ?? 0) !== 1) { errors.push(`Вопрос Id=${q.id}: должен быть ровно один верный ответ.`); break; }
   }

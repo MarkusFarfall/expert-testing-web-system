@@ -6,3 +6,6 @@ if (!connectionString) throw new Error("DB_URL is required");
 // не переносит параллельные запросы в одном клиенте postgres.js.
 const client = postgres(connectionString, { prepare: false, max: 2, idle_timeout: 60, connect_timeout: 15, max_lifetime: 300 });
 export const db = drizzle(client);
+
+// Used by isolated integration tests / graceful shutdown; never invoked by a request.
+export async function closeDb() { await client.end({ timeout: 5 }); }

@@ -1,3 +1,6 @@
+// Legacy Next.js cookie API scenario, not the current Deno deployment.
+// Prefer npm run test:ui and the guarded Deno integration suite.
+if (process.env.ALLOW_LEGACY_TEST_DB_WRITES !== 'yes') throw new Error('Legacy destructive test disabled. Use the isolated regression suites documented in README.');
 import 'dotenv/config';
 import { chromium, expect } from '@playwright/test';
 import ExcelJS from 'exceljs';

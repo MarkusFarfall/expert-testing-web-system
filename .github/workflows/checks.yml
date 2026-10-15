@@ -1,0 +1,61 @@
+name: Isolated checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  frontend-and-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build:test && npm run test:ui
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ui-screenshots
+          path: .artifacts/ui/
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: local-ci-only
+          POSTGRES_DB: ktpp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_URL: postgresql://postgres:local-ci-only@127.0.0.1:5432/ktpp_test
+      ALLOW_TEST_DB_WRITES: 'yes'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno check --node-modules-dir=auto --config supabase/functions/portal/deno.json supabase/functions/portal/index.ts
+      - run: |
+          for migration in supabase/migrations/*.sql; do
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$migration" || exit 1
+          done
+      - run: deno run --node-modules-dir=auto --config supabase/functions/portal/deno.json --allow-env --allow-net=127.0.0.1:5432 supabase/functions/portal/tests/integration.ts

@@ -1,3 +1,7 @@
+// Destructive integration checks: isolated database only, never the production DB.
+if (Deno.env.get("ALLOW_TEST_DB_WRITES") !== "yes") throw new Error("Set ALLOW_TEST_DB_WRITES=yes only for an isolated test database.");
+const testPassword = Deno.env.get("TEST_ADMIN_PASSWORD");
+if (!testPassword) throw new Error("TEST_ADMIN_PASSWORD is required.");
 // Локальный прогон роутера без сети: обращаемся напрямую к handleRequest
 Deno.env.set("DB_URL", Deno.env.get("DB_URL")!);
 const { handleRequest } = await import("./lib/router.ts");
@@ -15,4 +19,5 @@ console.log("results без visitor:", JSON.stringify(await call("results")));
 console.log("admin/session без токена:", JSON.stringify(await call("admin/session")));
 console.log("admin/exams без токена:", JSON.stringify(await call("admin/exams")));
 console.log("login неверный:", JSON.stringify(await call("admin/login", { method: "POST", body: JSON.stringify({ password: "неверный-пароль" }), headers: { "content-type": "application/json" } })));
-console.log("login верный:", JSON.stringify(await call("admin/login", { method: "POST", body: JSON.stringify({ password: "ktpp12390" }), headers: { "content-type": "application/json" } })).slice(0, 120));
+const authenticated = await call("admin/login", { method: "POST", body: JSON.stringify({ password: testPassword }), headers: { "content-type": "application/json" } });
+console.log("login верный: HTTP", authenticated.status); // never print the returned session token

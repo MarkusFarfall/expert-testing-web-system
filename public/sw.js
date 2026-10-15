@@ -71,7 +71,10 @@ async function networkFirst(cacheName, request, fallbackToOffline) {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;                 // ничего, что меняет данные, не перехватываем
+  // API credentials mark private responses even with a same-origin reverse proxy.
+  if (request.headers.has("x-visitor-id") || request.headers.has("x-admin-token")) return;
   const url = new URL(request.url);
+  if (/\/(?:api|portal|test-api)(?:\/|$)/.test(url.pathname)) return;
   if (url.origin !== SAME_ORIGIN) return;               // API и сторонние ресурсы — напрямую в сеть
   if (request.headers.has("range")) return;
   if (request.mode === "navigate") { event.respondWith(networkFirst(PAGE_CACHE, request, true)); return; }

@@ -45,7 +45,7 @@ export async function handleRequest(request: Request): Promise<Response> {
       const input = await request.json();
       const password = typeof input?.password === "string" ? input.password : "";
       const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "edge";
-      const token = await login(password, input?.setup === true, ip);
+      const token = await login(password, input?.setup === true, ip, typeof input?.setupToken === "string" ? input.setupToken : "");
       return json({ authenticated: true, setupRequired: false, token });
     }
     if (key === "admin/logout" && method === "POST") { await logout(adminToken); return json({ ok: true }); }
